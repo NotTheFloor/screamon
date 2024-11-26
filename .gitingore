@@ -1,0 +1,52 @@
+# .gitignore
+*.bak*
+
+# Ignore system files
+.DS_Store
+
+# Ignore misc files
+get_os_info.py
+sproc_prog_dialog.py
+New\ folder/*
+StagingTableData/*
+transactions*
+uninstall.sql*
+api_test.py
+log.txt
+api_log.txt
+sql_test.py
+api_test.py
+*.zip
+test0*
+
+# Ignore temporary files and caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+
+# Ignore build and distribution directories
+build/
+dist/
+/coverage
+
+
+# Ignore temporary files and caches
+*.log
+*.cache
+*.tmp
+
+
+# misc
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+env/
+.xml
+
+# Ignore sensitive files
+# Add any sensitive files or files containing secrets/API keys here
