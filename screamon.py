@@ -82,8 +82,13 @@ def extract_local_count(local_text):
     local_index = local_text.find('l')
     corp_index = local_text.find('C')
 
+    print(local_text)
+
     if local_index == -1 or local_index > corp_index or corp_index == -1:
         return -1
+
+    if local_text[local_index+1:corp_index].strip() == '':
+        return 0
 
     pop_count_string = local_corp_text[local_index + 1:corp_index]
     open_index = pop_count_string.find('[') # ]
@@ -127,7 +132,7 @@ if not local_corp_coords:
         json.dump(coords, f)
 
 t0 = time.time()
-last_count = 0
+last_count = -2
 
 print(f"Entering loop - current refresh rate {REFRESH_RATE}")
 while True:
@@ -144,7 +149,7 @@ while True:
 
     if local_count == -1:
         print('Misread')
-        playsound.playsound('sounds/woop.flac')
+        # playsound.playsound('sounds/woop.flac')
         continue
 
     if local_count > last_count: 
