@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 import playsound
 
-APP_VERSION = '0.1.0'
+APP_VERSION = '0.1.1'
 REFRESH_RATE = 3
 SAVE_FILE = 'settings.conf'
 
@@ -81,8 +81,9 @@ def extract_local_count(local_text):
     local_index = local_text.find('l')
     corp_index = local_text.find('C')
 
-    if local_text[local_index + 1] == 'o':
-        local_index = local_text.find('l', local_index + 1)
+    if len(local_text) > local_index + 1:
+        if local_text[local_index + 1] == 'o':
+            local_index = local_text.find('l', local_index + 1)
 
 
     if local_index == -1 or local_index > corp_index or corp_index == -1:
@@ -172,6 +173,8 @@ local_corp_coords = []
 chat_col_coords = []
 target_coords = []
 
+print(f'App version {APP_VERSION}')
+
 if os.path.exists(SAVE_FILE):
     ans = input('Settings found. Use last settings? Y/n: ')
     if ans == '' or ans.upper()[0] != 'N':
@@ -236,6 +239,7 @@ while True:
         playsound.playsound('sounds/woop.wav')
     elif target_count < ast_count:
         print(f'Target count decreased to {target_count} from {ast_count}')
+        print(target_text)
         ast_count = target_count
         playsound.playsound('sounds/pluck.wav')
         
