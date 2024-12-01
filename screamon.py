@@ -8,8 +8,7 @@ import cv2
 import numpy as np
 import playsound
 
-
-
+APP_VERSION = '0.1.0'
 REFRESH_RATE = 3
 SAVE_FILE = 'settings.conf'
 
@@ -82,9 +81,12 @@ def extract_local_count(local_text):
     local_index = local_text.find('l')
     corp_index = local_text.find('C')
 
-    print(local_text)
+    if local_text[local_index + 1] == 'o':
+        local_index = local_text.find('l', local_index + 1)
+
 
     if local_index == -1 or local_index > corp_index or corp_index == -1:
+        print(local_text)
         return -1
 
     if local_text[local_index+1:corp_index].strip() == '':
@@ -92,12 +94,18 @@ def extract_local_count(local_text):
 
     pop_count_string = local_corp_text[local_index + 1:corp_index]
     open_index = pop_count_string.find('[') # ]
+    if open_index == -1:
+        open_index = pop_count_string.find('(') # ]
 
     if open_index == -1:
+        print(local_text)
         return -1
 
     close_index = pop_count_string.find(']')
+    if close_index == -1:
+        close_index = pop_count_string.find(')') # ]
     if close_index == -1 or close_index > corp_index:
+        print(local_text)
         return -1
 
     result = -1
@@ -108,31 +116,83 @@ def extract_local_count(local_text):
 
     return result
 
+def extract_astroid_count(target_text):
+    count = target_text.count('Astroid')
+    count += target_text.count('Asteroid')
+    count += target_text.count('Asteraid')
+
+    return count
+    
+
 def get_user_col_count(user_col_text):
     return len([line.strip() for line in user_col_text.splitlines() if line.strip()])
 
+def load_settings():
+    with open(SAVE_FILE, 'r') as f:
+        settings = json.load(f)
+
+    # Version checks - we could really just store these at a tuple in both the
+    # settings file and app to make it easier. I like the text version thouhg
+    # but I'm dumb
+    if 'VERSION' not in settings:
+        print('Unsupported settings version: No version info')
+        return None
+
+    app_version = settings['VERSION']
+    version_info = app_version.strip().split('.')
+    if len(version_info) != 3:
+        print(f'Corrupted or unsupported version: {app_version}')
+        return None
+
+    settings_major = app_version[0]
+    settings_minor = app_version[1]
+    settings_build = app_version[2]
+    
+    app_major = APP_VERSION[0]
+    app_minor = APP_VERSION[1]
+    app_build = APP_VERSION[2]
+
+    if settings_major != app_major or settings_minor != app_minor:
+        print(f'Incompatible settings version: {app_version} in settings vs {APP_VERSION}')
+        return None
+
+    return settings['COORDS']
+
+def save_settings(local_coords, chat_col_coords, target_coords):
+    settings = {
+            'VERSION': APP_VERSION,
+            'COORDS': [local_coords, chat_col_coords, target_coords]
+            }
+
+    with open(SAVE_FILE, 'w') as f:
+        json.dump(settings, f)
+
+
 local_corp_coords = []
 chat_col_coords = []
+target_coords = []
 
 if os.path.exists(SAVE_FILE):
     ans = input('Settings found. Use last settings? Y/n: ')
     if ans == '' or ans.upper()[0] != 'N':
-        with open(SAVE_FILE, 'r') as f:
-            coords = json.load(f)
-            
-        local_corp_coords = coords[0]
-        chat_col_coords = coords[1]
+        coords = load_settings()
+        if coords is not None:
+            local_corp_coords = coords[0]
+            chat_col_coords = coords[1]
+            target_coords = coords[2]
 
 if not local_corp_coords:
     local_corp_coords = get_coords('Local [x] Corp [x] line')
     chat_col_coords = get_coords('chat user column')
+    target_coords = get_coords('target line')
 
-    with open(SAVE_FILE, 'w') as f:
-        coords = [local_corp_coords, chat_col_coords]
-        json.dump(coords, f)
+    save_settings(local_corp_coords, chat_col_coords, target_coords)
 
 t0 = time.time()
 last_count = -2
+ast_count = 0
+misreading = False
+mr_count = 0
 
 print(f"Entering loop - current refresh rate {REFRESH_RATE}")
 while True:
@@ -143,15 +203,23 @@ while True:
 
     local_corp_text = capture_text(local_corp_coords)
     #chat_col_text = capture_text(chat_col_coords)
+    target_text = capture_text(target_coords)
 
     local_count = extract_local_count(local_corp_text)
     #user_col_count = get_user_col_count(chat_col_text)
+    target_count = extract_astroid_count(target_text)
 
     if local_count == -1:
         print('Misread')
-        # playsound.playsound('sounds/woop.flac')
+        if not misreading or mr_count > 4:
+            mr_count = 0
+            playsound.playsound('sounds/click_x.wav')
+            misreading = True
+        mr_count += 1
         continue
 
+    misreading = False
+    mr_count = 0
     if local_count > last_count: 
         print(f'Local count increased to {local_count} from {last_count}')
         last_count = local_count
@@ -161,5 +229,14 @@ while True:
         last_count = local_count
         playsound.playsound('sounds/ok.wav')
         
+        
+    if target_count > ast_count: 
+        print(f'Target count increased to {target_count} from {ast_count}')
+        ast_count = target_count 
+        playsound.playsound('sounds/woop.wav')
+    elif target_count < ast_count:
+        print(f'Target count decreased to {target_count} from {ast_count}')
+        ast_count = target_count
+        playsound.playsound('sounds/pluck.wav')
         
 
