@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 import playsound
 
-APP_VERSION = '0.1.1'
+APP_VERSION = '0.1.2'
 REFRESH_RATE = 3
 SAVE_FILE = 'settings.conf'
 
@@ -121,6 +121,8 @@ def extract_astroid_count(target_text):
     count = target_text.count('Astroid')
     count += target_text.count('Asteroid')
     count += target_text.count('Asteraid')
+    count += target_text.count('Asterpid')
+    count += target_text.count('Asterocid')
 
     return count
     
