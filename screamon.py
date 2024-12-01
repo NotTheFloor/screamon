@@ -123,6 +123,7 @@ def extract_astroid_count(target_text):
     count += target_text.count('Asteraid')
     count += target_text.count('Asterpid')
     count += target_text.count('Asterocid')
+    count += target_text.count('Astersid')
 
     return count
     
@@ -198,6 +199,7 @@ last_count = -2
 ast_count = 0
 misreading = False
 mr_count = 0
+user_count = 0
 
 print(f"Entering loop - current refresh rate {REFRESH_RATE}")
 while True:
@@ -207,11 +209,11 @@ while True:
     t0 = time.time()
 
     local_corp_text = capture_text(local_corp_coords)
-    #chat_col_text = capture_text(chat_col_coords)
+    chat_col_text = capture_text(chat_col_coords)
     target_text = capture_text(target_coords)
 
     local_count = extract_local_count(local_corp_text)
-    #user_col_count = get_user_col_count(chat_col_text)
+    user_col_count = get_user_col_count(chat_col_text)
     target_count = extract_astroid_count(target_text)
 
     if local_count == -1:
@@ -244,5 +246,14 @@ while True:
         print(target_text)
         ast_count = target_count
         playsound.playsound('sounds/pluck.wav')
+
+    if user_col_count > user_count: 
+        print(f'Local count increased to {local_count} from {user_count}')
+        user_count = user_col_count
+        playsound.playsound('sounds/bad.wav')
+    elif local_count < user_count:
+        print(f'Local count decreased to {local_count} from {user_count}')
+        user_count =user_col_count 
+        playsound.playsound('sounds/ok.wav')
         
 
