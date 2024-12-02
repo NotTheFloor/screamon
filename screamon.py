@@ -189,7 +189,7 @@ if os.path.exists(SAVE_FILE):
 
 if not local_corp_coords:
     local_corp_coords = get_coords('Local [x] Corp [x] line')
-    chat_col_coords = get_coords('chat user column')
+    chat_col_coords = get_coords('type column in overview')
     target_coords = get_coords('target line')
 
     save_settings(local_corp_coords, chat_col_coords, target_coords)
