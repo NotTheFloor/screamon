@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 import playsound
 
-APP_VERSION = '0.1.2'
+APP_VERSION = '0.1.3'
 REFRESH_RATE = 3
 SAVE_FILE = 'settings.conf'
 
@@ -248,12 +248,12 @@ while True:
         playsound.playsound('sounds/pluck.wav')
 
     if user_col_count > user_count: 
-        print(f'Local count increased to {local_count} from {user_count}')
+        print(f'Type count increased to {user_col_count} from {user_count}')
         user_count = user_col_count
         playsound.playsound('sounds/bad.wav')
-    elif local_count < user_count:
-        print(f'Local count decreased to {local_count} from {user_count}')
-        user_count =user_col_count 
+    elif user_col_count < user_count:
+        print(f'Type count decreased to {user_col_count} from {user_count}')
+        user_count = user_col_count 
         playsound.playsound('sounds/ok.wav')
         
 
