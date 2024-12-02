@@ -117,7 +117,7 @@ def extract_local_count(local_text):
 
     return result
 
-def extract_astroid_count(target_text):
+def extract_asteroid_count(target_text):
     count = target_text.count('Astroid')
     count += target_text.count('Asteroid')
     count += target_text.count('Asteraid')
@@ -128,7 +128,7 @@ def extract_astroid_count(target_text):
     return count
     
 
-def get_user_col_count(user_col_text):
+def get_line_count(user_col_text):
     return len([line.strip() for line in user_col_text.splitlines() if line.strip()])
 
 def load_settings():
@@ -199,7 +199,7 @@ last_count = -2
 ast_count = 0
 misreading = False
 mr_count = 0
-user_count = 0
+overview_line_count = 0
 
 print(f"Entering loop - current refresh rate {REFRESH_RATE}")
 while True:
@@ -213,8 +213,8 @@ while True:
     target_text = capture_text(target_coords)
 
     local_count = extract_local_count(local_corp_text)
-    user_col_count = get_user_col_count(chat_col_text)
-    target_count = extract_astroid_count(target_text)
+    overview_count = get_line_count(chat_col_text)
+    target_count = extract_asteroid_count(target_text)
 
     if local_count == -1:
         print('Misread')
@@ -247,13 +247,13 @@ while True:
         ast_count = target_count
         playsound.playsound('sounds/pluck.wav')
 
-    if user_col_count > user_count: 
-        print(f'Type count increased to {user_col_count} from {user_count}')
-        user_count = user_col_count
+    if overview_count > overview_line_count: 
+        print(f'Type count increased to {overview_count} from {overview_line_count}')
+        overview_line_count =overview_count 
         playsound.playsound('sounds/bad.wav')
-    elif user_col_count < user_count:
-        print(f'Type count decreased to {user_col_count} from {user_count}')
-        user_count = user_col_count 
+    elif overview_count < overview_line_count:
+        print(f'Type count decreased to {overview_count} from {overview_line_count}')
+        overview_line_count = overview_count 
         playsound.playsound('sounds/ok.wav')
         
 
