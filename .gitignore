@@ -1,6 +1,8 @@
 # .gitignore
 *.bak*
 settings.conf
+config.json
+screamon.db
 
 # Ignore system files
 .DS_Store
@@ -47,7 +49,11 @@ dist/
 .env.production.local
 
 env/
+.venv/
 .xml
+*.egg-info/
 
 # Ignore sensitive files
 # Add any sensitive files or files containing secrets/API keys here
+
+.env

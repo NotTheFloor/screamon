@@ -237,23 +237,23 @@ while True:
         playsound.playsound('sounds/ok.wav')
         
         
-    if target_count > ast_count: 
-        print(f'Target count increased to {target_count} from {ast_count}')
-        ast_count = target_count 
-        playsound.playsound('sounds/woop.wav')
-    elif target_count < ast_count:
-        print(f'Target count decreased to {target_count} from {ast_count}')
-        print(target_text)
-        ast_count = target_count
-        playsound.playsound('sounds/pluck.wav')
-
-    if overview_count > overview_line_count: 
-        print(f'Type count increased to {overview_count} from {overview_line_count}')
-        overview_line_count =overview_count 
-        playsound.playsound('sounds/bad.wav')
-    elif overview_count < overview_line_count:
-        print(f'Type count decreased to {overview_count} from {overview_line_count}')
-        overview_line_count = overview_count 
-        playsound.playsound('sounds/ok.wav')
+    # if target_count > ast_count: 
+        # print(f'Target count increased to {target_count} from {ast_count}')
+        # ast_count = target_count 
+        # playsound.playsound('sounds/woop.wav')
+    # elif target_count < ast_count:
+        # print(f'Target count decreased to {target_count} from {ast_count}')
+        # print(target_text)
+        # ast_count = target_count
+        # playsound.playsound('sounds/pluck.wav')
+# 
+    # if overview_count > overview_line_count: 
+        # print(f'Type count increased to {overview_count} from {overview_line_count}')
+        # overview_line_count =overview_count 
+        # playsound.playsound('sounds/bad.wav')
+    # elif overview_count < overview_line_count:
+        # print(f'Type count decreased to {overview_count} from {overview_line_count}')
+        # overview_line_count = overview_count 
+        # playsound.playsound('sounds/ok.wav')
         
 

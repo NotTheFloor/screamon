@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Screamon Dashboard</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <h1>Screamon</h1>
+        <p class="subtitle">EVE Online Screen Reader</p>
+    </header>
+
+    <main>
+        <section id="status-section">
+            <h2>Detector Status</h2>
+            <div id="detectors" class="detector-grid">
+                <!-- Populated by JavaScript -->
+                <div class="loading">Loading...</div>
+            </div>
+        </section>
+
+        <section id="esi-section">
+            <h2>EVE Online Authentication</h2>
+            <div id="esi-status">
+                <div class="loading">Loading...</div>
+            </div>
+        </section>
+
+        <section id="config-section">
+            <h2>Configuration</h2>
+            <div class="config-form">
+                <label>
+                    Refresh Rate (seconds):
+                    <input type="number" id="refresh-rate" min="1" max="60" step="0.5" value="3">
+                </label>
+                <button id="save-config">Save</button>
+            </div>
+        </section>
+
+        <section id="events-section">
+            <h2>Recent Events</h2>
+            <div id="events" class="events-list">
+                <!-- Populated by JavaScript -->
+                <div class="loading">Loading...</div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>Screamon v0.2.0 | <a href="https://github.com/your-repo/screamon">GitHub</a></p>
+    </footer>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

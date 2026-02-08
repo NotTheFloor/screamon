@@ -1,0 +1,57 @@
+[project]
+name = "screamon"
+version = "0.2.0"
+description = "EVE Online screen reader with audio alerts and web dashboard"
+requires-python = ">=3.11"
+dependencies = [
+    "pillow>=10.0.0",
+    "pytesseract>=0.3.10",
+    "opencv-python>=4.8.0",
+    "numpy>=1.24.0",
+    "litestar>=2.0.0",
+    "uvicorn>=0.24.0",
+    "httpx>=0.25.0",
+    "cryptography>=41.0.0",
+    "PyJWT[crypto]>=2.8.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+macos = [
+    "pyobjc-framework-Quartz>=10.0",
+    "pyobjc-framework-ApplicationServices>=10.0",
+    "pyobjc-framework-Cocoa>=10.0",
+]
+linux = [
+    "simpleaudio>=1.0.4",  # Fallback if aplay/paplay not available
+]
+dev = [
+    "pytest>=7.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+screamon = "screamon.cli:run_monitor"
+screamon-web = "screamon.cli:run_web"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/screamon"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/screamon",
+    "mouse",
+    "sounds",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
