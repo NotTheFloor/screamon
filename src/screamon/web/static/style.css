@@ -348,6 +348,55 @@ button:disabled {
     min-height: 1.2em;
 }
 
+/* Blueprints Table */
+.blueprints-table-wrap {
+    max-height: 400px;
+    overflow-y: auto;
+    margin-top: 1rem;
+}
+
+.blueprints-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.blueprints-table th {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--accent-color);
+    color: var(--accent-color);
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    background-color: var(--surface-color);
+}
+
+.blueprints-table td {
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--primary-color);
+}
+
+.bp-badge {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.bp-badge.bpo {
+    background-color: var(--primary-color);
+    color: #6ecbf5;
+    border: 1px solid #6ecbf5;
+}
+
+.bp-badge.bpc {
+    background-color: var(--primary-color);
+    color: #f5a623;
+    border: 1px solid #f5a623;
+}
+
 /* Loading State */
 .loading {
     text-align: center;

@@ -247,4 +247,26 @@ def create_esi_routes(config: AppConfig, db: Database, auth: ESIAuth) -> list:
             async with await self._get_client() as client:
                 return await client.get_character_standings()
 
+        @get("/blueprints")
+        async def get_blueprints(self) -> list[dict]:
+            """Get active character's blueprints with resolved names."""
+            async with await self._get_client() as client:
+                blueprints = await client.get_character_blueprints()
+
+                # Resolve type_ids to names
+                type_ids = list({bp["type_id"] for bp in blueprints})
+                names = await client.resolve_type_names(type_ids)
+
+                # Enrich blueprints with name and BPO/BPC label
+                for bp in blueprints:
+                    bp["type_name"] = names.get(bp["type_id"], f"Unknown ({bp['type_id']})")
+                    if bp["quantity"] == -2:
+                        bp["copy"] = True
+                    else:
+                        bp["copy"] = False
+
+                # Sort by name
+                blueprints.sort(key=lambda bp: bp["type_name"])
+                return blueprints
+
     return [ESIAuthController, ESICharacterController, ESIDataController]

@@ -91,6 +91,44 @@
             </template>
         </section>
 
+        <!-- Blueprints -->
+        <section id="blueprints-section" x-show="esi.configured && esi.characters.some(c => c.is_active)">
+            <h2>
+                Blueprints
+                <span x-show="blueprints.length > 0" style="font-size: 0.85rem; color: var(--text-muted); font-weight: 400;"
+                      x-text="'(' + blueprints.length + ')'"></span>
+            </h2>
+            <button @click="loadBlueprints()" :disabled="loading.blueprints"
+                    x-text="loading.blueprints ? 'Loading...' : 'Load Blueprints'"></button>
+            <div class="blueprints-table-wrap" x-show="blueprints.length > 0" x-cloak>
+                <table class="blueprints-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>ME</th>
+                            <th>TE</th>
+                            <th>Runs</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="bp in blueprints" :key="bp.item_id">
+                            <tr>
+                                <td x-text="bp.type_name"></td>
+                                <td>
+                                    <span class="bp-badge" :class="bp.copy ? 'bpc' : 'bpo'"
+                                          x-text="bpLabel(bp)"></span>
+                                </td>
+                                <td x-text="bp.material_efficiency + '%'"></td>
+                                <td x-text="bp.time_efficiency + '%'"></td>
+                                <td x-text="bpRuns(bp)"></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
         <!-- Configuration -->
         <section id="config-section">
             <h2>Configuration</h2>

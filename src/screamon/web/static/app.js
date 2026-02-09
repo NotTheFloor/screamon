@@ -8,8 +8,9 @@ function dashboard() {
         events: [],
         config: { refresh_rate: 3 },
         esi: { configured: false, characters: [] },
+        blueprints: [],
         esiMessage: '',
-        loading: { detectors: true, events: true, esi: true },
+        loading: { detectors: true, events: true, esi: true, blueprints: false },
 
         init() {
             this.loadDetectors();
@@ -77,6 +78,17 @@ function dashboard() {
                 console.error('Failed to load ESI status', e);
             } finally {
                 this.loading.esi = false;
+            }
+        },
+
+        async loadBlueprints() {
+            this.loading.blueprints = true;
+            try {
+                this.blueprints = await this.fetchAPI('/esi/data/blueprints');
+            } catch (e) {
+                console.error('Failed to load blueprints', e);
+            } finally {
+                this.loading.blueprints = false;
             }
         },
 
@@ -167,6 +179,16 @@ function dashboard() {
             return event.old_value !== null
                 ? `${event.old_value} → ${event.new_value}`
                 : event.new_value;
+        },
+
+        bpLabel(bp) {
+            if (bp.copy) return 'BPC';
+            if (bp.quantity > 0) return `BPO x${bp.quantity}`;
+            return 'BPO';
+        },
+
+        bpRuns(bp) {
+            return bp.runs === -1 ? '∞' : bp.runs;
         },
     };
 }
