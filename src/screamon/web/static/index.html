@@ -6,6 +6,8 @@
     <title>Screamon Dashboard</title>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="stylesheet" href="/static/style.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"></script>
+    <script src="/static/app.js"></script>
 </head>
 <body>
     <header>
@@ -13,38 +15,111 @@
         <p class="subtitle">EVE Online Screen Reader</p>
     </header>
 
-    <main>
+    <main x-data="dashboard()" x-init="init()">
+        <!-- Detector Status -->
         <section id="status-section">
             <h2>Detector Status</h2>
-            <div id="detectors" class="detector-grid">
-                <!-- Populated by JavaScript -->
-                <div class="loading">Loading...</div>
+            <div class="detector-grid">
+                <div class="loading" x-show="loading.detectors">Loading...</div>
+                <div class="loading" x-show="!loading.detectors && detectors.length === 0" x-cloak>No detectors configured</div>
+                <template x-for="d in detectors" :key="d.name">
+                    <div class="detector-card" :class="{ disabled: !d.enabled }">
+                        <div class="status-indicator"></div>
+                        <div class="name" x-text="formatDetectorName(d.name)"></div>
+                        <template x-if="d.value !== null">
+                            <div class="value" x-text="d.value"></div>
+                        </template>
+                        <template x-if="d.value === null">
+                            <div class="value no-data">No data</div>
+                        </template>
+                        <template x-if="d.last_changed">
+                            <div class="last-changed" x-text="'Changed: ' + formatTime(d.last_changed)"></div>
+                        </template>
+                        <div class="coords-status" style="font-size: 0.8rem; color: var(--text-muted);"
+                             x-text="d.coords_set ? 'Calibrated' : 'Not calibrated'"></div>
+                        <div class="actions">
+                            <label class="toggle">
+                                <input type="checkbox" :checked="d.enabled"
+                                       @change="toggleDetector(d.name)">
+                                <span class="slider"></span>
+                                Enable
+                            </label>
+                            <button class="secondary" @click="calibrateDetector(d.name)">
+                                Calibrate
+                            </button>
+                        </div>
+                    </div>
+                </template>
             </div>
         </section>
 
+        <!-- ESI Authentication -->
         <section id="esi-section">
             <h2>EVE Online Authentication</h2>
-            <div id="esi-status">
+            <div x-show="loading.esi">
                 <div class="loading">Loading...</div>
             </div>
+            <template x-if="!loading.esi && !esi.configured">
+                <div class="esi-not-configured">
+                    <p>ESI not configured. Add <code>client_id</code> to your <code>.env</code> file.</p>
+                </div>
+            </template>
+            <template x-if="!loading.esi && esi.configured">
+                <div class="esi-content">
+                    <div class="esi-characters">
+                        <template x-if="esi.characters.length === 0">
+                            <p class="esi-message">No characters authenticated yet.</p>
+                        </template>
+                        <template x-for="c in esi.characters" :key="c.character_id">
+                            <div class="esi-character" :class="{ active: c.is_active }">
+                                <span class="esi-character-name" x-text="c.character_name"></span>
+                                <template x-if="c.is_active">
+                                    <span class="esi-badge">Active</span>
+                                </template>
+                                <div class="esi-character-actions">
+                                    <template x-if="!c.is_active">
+                                        <button class="secondary" @click="esiActivateCharacter(c.character_id)">Activate</button>
+                                    </template>
+                                    <button class="secondary" @click="esiRemoveCharacter(c.character_id)">Remove</button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                    <button class="esi-login-btn" @click="esiLogin()">Authenticate with EVE Online</button>
+                    <p class="esi-message" x-text="esiMessage"></p>
+                </div>
+            </template>
         </section>
 
+        <!-- Configuration -->
         <section id="config-section">
             <h2>Configuration</h2>
             <div class="config-form">
                 <label>
                     Refresh Rate (seconds):
-                    <input type="number" id="refresh-rate" min="1" max="60" step="0.5" value="3">
+                    <input type="number" min="1" max="60" step="0.5"
+                           x-model="config.refresh_rate">
                 </label>
-                <button id="save-config">Save</button>
+                <button @click="saveConfig()">Save</button>
             </div>
         </section>
 
+        <!-- Recent Events -->
         <section id="events-section">
             <h2>Recent Events</h2>
-            <div id="events" class="events-list">
-                <!-- Populated by JavaScript -->
-                <div class="loading">Loading...</div>
+            <div class="events-list">
+                <div class="loading" x-show="loading.events">Loading...</div>
+                <div class="loading" x-show="!loading.events && events.length === 0" x-cloak>No events yet</div>
+                <template x-for="event in events" :key="event.id || event.timestamp">
+                    <div class="event-item">
+                        <div>
+                            <span class="detector-name" x-text="formatDetectorName(event.detector)"></span>
+                            <span class="event-type" :class="event.event_type" x-text="event.event_type"></span>
+                        </div>
+                        <div class="event-value" x-text="eventValueChange(event)"></div>
+                        <div class="event-time" x-text="formatTime(event.timestamp)"></div>
+                    </div>
+                </template>
             </div>
         </section>
     </main>
@@ -52,7 +127,5 @@
     <footer>
         <p>Screamon v0.2.0 | <a href="https://github.com/your-repo/screamon">GitHub</a></p>
     </footer>
-
-    <script src="/static/app.js"></script>
 </body>
 </html>

@@ -1,297 +1,172 @@
-// Screamon Dashboard JavaScript
+// Screamon Dashboard — Alpine.js Component
 
 const API_BASE = '/api';
 
-// State
-let detectors = [];
-let config = {};
+function dashboard() {
+    return {
+        detectors: [],
+        events: [],
+        config: { refresh_rate: 3 },
+        esi: { configured: false, characters: [] },
+        esiMessage: '',
+        loading: { detectors: true, events: true, esi: true },
 
-// DOM Elements
-const detectorsContainer = document.getElementById('detectors');
-const eventsContainer = document.getElementById('events');
-const refreshRateInput = document.getElementById('refresh-rate');
-const saveConfigBtn = document.getElementById('save-config');
+        init() {
+            this.loadDetectors();
+            this.loadConfig();
+            this.loadEvents();
+            this.loadESIStatus();
 
-// ESI Elements
-const esiContainer = document.getElementById('esi-status');
+            setInterval(() => {
+                this.loadDetectors();
+                this.loadEvents();
+            }, 2000);
 
-// Initialize
-document.addEventListener('DOMContentLoaded', () => {
-    loadDetectors();
-    loadConfig();
-    loadEvents();
-    loadESIStatus();
+            setInterval(() => this.loadESIStatus(), 10000);
+        },
 
-    // Auto-refresh every 2 seconds
-    setInterval(() => {
-        loadDetectors();
-        loadEvents();
-    }, 2000);
+        // API helper
+        async fetchAPI(endpoint, options = {}) {
+            const response = await fetch(`${API_BASE}${endpoint}`, {
+                headers: { 'Content-Type': 'application/json' },
+                ...options,
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.json();
+        },
 
-    // Refresh ESI status less frequently
-    setInterval(loadESIStatus, 10000);
+        // Data loaders
+        async loadDetectors() {
+            try {
+                this.detectors = await this.fetchAPI('/detectors/');
+            } catch (e) {
+                console.error('Failed to load detectors', e);
+            } finally {
+                this.loading.detectors = false;
+            }
+        },
 
-    // Save config button
-    saveConfigBtn.addEventListener('click', saveConfig);
-});
+        async loadConfig() {
+            try {
+                this.config = await this.fetchAPI('/config');
+            } catch (e) {
+                console.error('Failed to load config', e);
+            }
+        },
 
-// API Functions
-async function fetchAPI(endpoint, options = {}) {
-    try {
-        const response = await fetch(`${API_BASE}${endpoint}`, {
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            ...options,
-        });
+        async loadEvents() {
+            try {
+                this.events = await this.fetchAPI('/events/?limit=20');
+            } catch (e) {
+                console.error('Failed to load events', e);
+            } finally {
+                this.loading.events = false;
+            }
+        },
 
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
+        async loadESIStatus() {
+            try {
+                const response = await fetch('/esi/status');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                this.esi = {
+                    configured: data.configured,
+                    characters: data.characters || [],
+                };
+            } catch (e) {
+                console.error('Failed to load ESI status', e);
+            } finally {
+                this.loading.esi = false;
+            }
+        },
 
-        return await response.json();
-    } catch (error) {
-        console.error(`API Error: ${endpoint}`, error);
-        throw error;
-    }
-}
+        // Actions
+        async toggleDetector(name) {
+            try {
+                await this.fetchAPI(`/detectors/${name}/toggle`, { method: 'POST' });
+                await this.loadDetectors();
+            } catch (e) {
+                alert(`Failed to toggle detector: ${e.message}`);
+            }
+        },
 
-async function loadDetectors() {
-    try {
-        detectors = await fetchAPI('/detectors/');
-        renderDetectors();
-    } catch (error) {
-        detectorsContainer.innerHTML = '<div class="loading">Error loading detectors</div>';
-    }
-}
+        async calibrateDetector(name) {
+            try {
+                const result = await this.fetchAPI(`/detectors/${name}/calibrate`, { method: 'POST' });
+                alert(result.message);
+            } catch (e) {
+                alert(`Failed to request calibration: ${e.message}`);
+            }
+        },
 
-async function loadConfig() {
-    try {
-        config = await fetchAPI('/config');
-        refreshRateInput.value = config.refresh_rate;
-    } catch (error) {
-        console.error('Failed to load config', error);
-    }
-}
+        async saveConfig() {
+            try {
+                await this.fetchAPI('/config', {
+                    method: 'PUT',
+                    body: JSON.stringify({ refresh_rate: parseFloat(this.config.refresh_rate) }),
+                });
+                alert('Configuration saved!');
+            } catch (e) {
+                alert(`Failed to save config: ${e.message}`);
+            }
+        },
 
-async function loadEvents() {
-    try {
-        const events = await fetchAPI('/events/?limit=20');
-        renderEvents(events);
-    } catch (error) {
-        eventsContainer.innerHTML = '<div class="loading">Error loading events</div>';
-    }
-}
+        async esiLogin() {
+            try {
+                const response = await fetch('/esi/login');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                this.esiMessage = 'Opening EVE login... If nothing happened, check your browser.';
+            } catch (e) {
+                alert(`Failed to start ESI login: ${e.message}`);
+            }
+        },
 
-async function toggleDetector(name) {
-    try {
-        await fetchAPI(`/detectors/${name}/toggle`, { method: 'POST' });
-        loadDetectors();
-    } catch (error) {
-        alert(`Failed to toggle detector: ${error.message}`);
-    }
-}
+        async esiActivateCharacter(characterId) {
+            try {
+                await fetch(`/api/esi/characters/${characterId}/activate`, { method: 'POST' });
+                await this.loadESIStatus();
+            } catch (e) {
+                alert(`Failed to activate character: ${e.message}`);
+            }
+        },
 
-async function calibrateDetector(name) {
-    try {
-        const result = await fetchAPI(`/detectors/${name}/calibrate`, { method: 'POST' });
-        alert(result.message);
-    } catch (error) {
-        alert(`Failed to request calibration: ${error.message}`);
-    }
-}
+        async esiRemoveCharacter(characterId) {
+            if (!confirm('Remove this character?')) return;
+            try {
+                await fetch(`/api/esi/characters/${characterId}`, { method: 'DELETE' });
+                await this.loadESIStatus();
+            } catch (e) {
+                alert(`Failed to remove character: ${e.message}`);
+            }
+        },
 
-async function saveConfig() {
-    try {
-        const data = {
-            refresh_rate: parseFloat(refreshRateInput.value),
-        };
-        await fetchAPI('/config', {
-            method: 'PUT',
-            body: JSON.stringify(data),
-        });
-        alert('Configuration saved!');
-    } catch (error) {
-        alert(`Failed to save config: ${error.message}`);
-    }
-}
+        // Formatters
+        formatDetectorName(name) {
+            return name
+                .split('_')
+                .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+                .join(' ');
+        },
 
-// ESI Functions
-async function loadESIStatus() {
-    try {
-        const response = await fetch('/esi/status');
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        renderESIStatus(data);
-    } catch (error) {
-        esiContainer.innerHTML = '<div class="loading">Error loading ESI status</div>';
-    }
-}
+        formatTime(isoString) {
+            const date = new Date(isoString);
+            const now = new Date();
+            const diff = now - date;
 
-async function esiLogin() {
-    try {
-        const response = await fetch('/esi/login');
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        // Browser should open automatically; show URL as fallback
-        esiContainer.querySelector('.esi-message').textContent =
-            'Opening EVE login... If nothing happened, click the link below.';
-    } catch (error) {
-        alert(`Failed to start ESI login: ${error.message}`);
-    }
-}
+            if (diff < 60000) return 'Just now';
+            if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+            if (date.toDateString() === now.toDateString()) {
+                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+            return date.toLocaleDateString([], {
+                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+            });
+        },
 
-async function esiActivateCharacter(characterId) {
-    try {
-        await fetch(`/api/esi/characters/${characterId}/activate`, { method: 'POST' });
-        loadESIStatus();
-    } catch (error) {
-        alert(`Failed to activate character: ${error.message}`);
-    }
-}
-
-async function esiRemoveCharacter(characterId) {
-    if (!confirm('Remove this character?')) return;
-    try {
-        await fetch(`/api/esi/characters/${characterId}`, { method: 'DELETE' });
-        loadESIStatus();
-    } catch (error) {
-        alert(`Failed to remove character: ${error.message}`);
-    }
-}
-
-function renderESIStatus(data) {
-    if (!data.configured) {
-        esiContainer.innerHTML = `
-            <div class="esi-not-configured">
-                <p>ESI not configured. Add <code>client_id</code> to your <code>.env</code> file.</p>
-            </div>
-        `;
-        return;
-    }
-
-    const characters = data.characters || [];
-    const characterList = characters.length > 0
-        ? characters.map(c => `
-            <div class="esi-character ${c.is_active ? 'active' : ''}">
-                <span class="esi-character-name">${c.character_name}</span>
-                ${c.is_active ? '<span class="esi-badge">Active</span>' : ''}
-                <div class="esi-character-actions">
-                    ${!c.is_active ? `<button class="secondary" onclick="esiActivateCharacter(${c.character_id})">Activate</button>` : ''}
-                    <button class="secondary" onclick="esiRemoveCharacter(${c.character_id})">Remove</button>
-                </div>
-            </div>
-        `).join('')
-        : '<p class="esi-message">No characters authenticated yet.</p>';
-
-    esiContainer.innerHTML = `
-        <div class="esi-content">
-            <div class="esi-characters">${characterList}</div>
-            <button class="esi-login-btn" onclick="esiLogin()">Authenticate with EVE Online</button>
-            <p class="esi-message"></p>
-        </div>
-    `;
-}
-
-// Render Functions
-function renderDetectors() {
-    if (detectors.length === 0) {
-        detectorsContainer.innerHTML = '<div class="loading">No detectors configured</div>';
-        return;
-    }
-
-    detectorsContainer.innerHTML = detectors.map(detector => {
-        const displayName = formatDetectorName(detector.name);
-        const valueDisplay = detector.value !== null
-            ? `<div class="value">${detector.value}</div>`
-            : `<div class="value no-data">No data</div>`;
-
-        const lastChanged = detector.last_changed
-            ? `<div class="last-changed">Changed: ${formatTime(detector.last_changed)}</div>`
-            : '';
-
-        const cardClass = detector.enabled ? '' : 'disabled';
-        const coordsStatus = detector.coords_set ? 'Calibrated' : 'Not calibrated';
-
-        return `
-            <div class="detector-card ${cardClass}">
-                <div class="status-indicator"></div>
-                <div class="name">${displayName}</div>
-                ${valueDisplay}
-                ${lastChanged}
-                <div class="coords-status" style="font-size: 0.8rem; color: var(--text-muted);">
-                    ${coordsStatus}
-                </div>
-                <div class="actions">
-                    <label class="toggle">
-                        <input type="checkbox" ${detector.enabled ? 'checked' : ''}
-                               onchange="toggleDetector('${detector.name}')">
-                        <span class="slider"></span>
-                        Enable
-                    </label>
-                    <button class="secondary" onclick="calibrateDetector('${detector.name}')">
-                        Calibrate
-                    </button>
-                </div>
-            </div>
-        `;
-    }).join('');
-}
-
-function renderEvents(events) {
-    if (events.length === 0) {
-        eventsContainer.innerHTML = '<div class="loading">No events yet</div>';
-        return;
-    }
-
-    eventsContainer.innerHTML = events.map(event => {
-        const displayName = formatDetectorName(event.detector);
-        const valueChange = event.old_value !== null
-            ? `${event.old_value} → ${event.new_value}`
-            : event.new_value;
-
-        return `
-            <div class="event-item">
-                <div>
-                    <span class="detector-name">${displayName}</span>
-                    <span class="event-type ${event.event_type}">${event.event_type}</span>
-                </div>
-                <div class="event-value">${valueChange}</div>
-                <div class="event-time">${formatTime(event.timestamp)}</div>
-            </div>
-        `;
-    }).join('');
-}
-
-// Helper Functions
-function formatDetectorName(name) {
-    return name
-        .split('_')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ');
-}
-
-function formatTime(isoString) {
-    const date = new Date(isoString);
-    const now = new Date();
-    const diff = now - date;
-
-    // Less than a minute ago
-    if (diff < 60000) {
-        return 'Just now';
-    }
-
-    // Less than an hour ago
-    if (diff < 3600000) {
-        const mins = Math.floor(diff / 60000);
-        return `${mins}m ago`;
-    }
-
-    // Today
-    if (date.toDateString() === now.toDateString()) {
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
-
-    // Other
-    return date.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        eventValueChange(event) {
+            return event.old_value !== null
+                ? `${event.old_value} → ${event.new_value}`
+                : event.new_value;
+        },
+    };
 }
