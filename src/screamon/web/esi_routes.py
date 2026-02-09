@@ -14,11 +14,15 @@ from ..database import Database
 from ..esi.auth import ESIAuth
 from ..esi.client import ESIClient
 from ..esi.models import ESICharacter, ESIToken
+from ..market import MarketService
+from ..sde import SDEData
 
 logger = logging.getLogger(__name__)
 
 
-def create_esi_routes(config: AppConfig, db: Database, auth: ESIAuth) -> list:
+def create_esi_routes(
+    config: AppConfig, db: Database, auth: ESIAuth, sde: SDEData, market: MarketService
+) -> list:
     """
     Create ESI route handlers with injected dependencies.
 
@@ -26,6 +30,8 @@ def create_esi_routes(config: AppConfig, db: Database, auth: ESIAuth) -> list:
         config: App configuration
         db: Database instance
         auth: ESI auth handler
+        sde: SDE data for blueprint materials
+        market: Market price service
 
     Returns:
         List of route handler classes
@@ -257,16 +263,73 @@ def create_esi_routes(config: AppConfig, db: Database, auth: ESIAuth) -> list:
                 type_ids = list({bp["type_id"] for bp in blueprints})
                 names = await client.resolve_type_names(type_ids)
 
-                # Enrich blueprints with name and BPO/BPC label
+                # Enrich blueprints with name, BPO/BPC label, and materials
                 for bp in blueprints:
                     bp["type_name"] = names.get(bp["type_id"], f"Unknown ({bp['type_id']})")
-                    if bp["quantity"] == -2:
-                        bp["copy"] = True
-                    else:
-                        bp["copy"] = False
+                    bp["copy"] = bp["quantity"] == -2
+
+                    # Attach SDE manufacturing materials
+                    if sde.is_loaded:
+                        mfg = sde.get_blueprint_materials(bp["type_id"])
+                        if mfg:
+                            bp["materials"] = mfg["materials"]
+                            bp["products"] = mfg["products"]
+                            bp["manufacturing_time"] = mfg["time"]
 
                 # Sort by name
                 blueprints.sort(key=lambda bp: bp["type_name"])
                 return blueprints
 
-    return [ESIAuthController, ESICharacterController, ESIDataController]
+    class SDEController(Controller):
+        """SDE data endpoints for static game data."""
+
+        path = "/api/sde"
+
+        @get("/blueprints/{type_id:int}/materials")
+        async def get_materials(self, type_id: int) -> dict:
+            """Get manufacturing materials for a blueprint type ID."""
+            if not sde.is_loaded:
+                raise HTTPException(status_code=503, detail="SDE data not loaded")
+
+            mfg = sde.get_blueprint_materials(type_id)
+            if mfg is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No manufacturing data for type {type_id}",
+                )
+            return mfg
+
+    class MarketController(Controller):
+        """Market price endpoints with caching."""
+
+        path = "/api/market"
+
+        @get("/prices")
+        async def get_prices(
+            self,
+            type_ids: str = Parameter(query="type_ids"),
+        ) -> dict:
+            """Get best buy/sell prices for given type IDs.
+
+            Query params:
+                type_ids: Comma-separated type IDs (e.g. "34,35,36")
+            """
+            ids = [int(x.strip()) for x in type_ids.split(",") if x.strip()]
+            if not ids:
+                raise HTTPException(status_code=400, detail="No type_ids provided")
+
+            prices = await market.get_prices(ids)
+            return {
+                "prices": {str(k): v for k, v in prices.items()},
+                "region_id": market.region_id,
+                "location_id": market.location_id,
+                "cache": market.cache_stats,
+            }
+
+    return [
+        ESIAuthController,
+        ESICharacterController,
+        ESIDataController,
+        SDEController,
+        MarketController,
+    ]

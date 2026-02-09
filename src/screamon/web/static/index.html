@@ -98,33 +98,93 @@
                 <span x-show="blueprints.length > 0" style="font-size: 0.85rem; color: var(--text-muted); font-weight: 400;"
                       x-text="'(' + blueprints.length + ')'"></span>
             </h2>
-            <button @click="loadBlueprints()" :disabled="loading.blueprints"
-                    x-text="loading.blueprints ? 'Loading...' : 'Load Blueprints'"></button>
+            <div class="blueprints-controls">
+                <button @click="loadBlueprints()" :disabled="loading.blueprints"
+                        x-text="loading.blueprints ? 'Loading...' : 'Load Blueprints'"></button>
+                <label class="toggle" x-show="blueprints.length > 0">
+                    <input type="checkbox" x-model="showDistinct">
+                    <span class="slider"></span>
+                    Distinct
+                </label>
+            </div>
             <div class="blueprints-table-wrap" x-show="blueprints.length > 0" x-cloak>
                 <table class="blueprints-table">
                     <thead>
                         <tr>
+                            <th></th>
                             <th>Name</th>
                             <th>Type</th>
+                            <th x-show="showDistinct">Qty</th>
                             <th>ME</th>
                             <th>TE</th>
                             <th>Runs</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        <template x-for="bp in blueprints" :key="bp.item_id">
-                            <tr>
+                    <template x-for="bp in filteredBlueprints" :key="bp.item_id || bp.type_id">
+                        <tbody>
+                            <tr class="bp-row" :class="{ 'bp-expanded': isBpExpanded(bp) }"
+                                @click="bp.materials && toggleBpMaterials(bp)"
+                                :style="bp.materials ? 'cursor:pointer' : ''">
+                                <td class="bp-expand-icon" x-text="bp.materials ? (isBpExpanded(bp) ? '▾' : '▸') : ''"></td>
                                 <td x-text="bp.type_name"></td>
                                 <td>
                                     <span class="bp-badge" :class="bp.copy ? 'bpc' : 'bpo'"
                                           x-text="bpLabel(bp)"></span>
                                 </td>
+                                <td x-show="showDistinct" x-text="bp.count || 1"></td>
                                 <td x-text="bp.material_efficiency + '%'"></td>
                                 <td x-text="bp.time_efficiency + '%'"></td>
                                 <td x-text="bpRuns(bp)"></td>
                             </tr>
-                        </template>
-                    </tbody>
+                            <template x-if="isBpExpanded(bp) && bp.materials">
+                                <tr class="bp-materials-row">
+                                    <td></td>
+                                    <td :colspan="showDistinct ? 6 : 5">
+                                        <div class="bp-materials">
+                                            <div class="bp-materials-header">
+                                                <span>Manufacturing Materials</span>
+                                                <span class="bp-materials-header-right">
+                                                    <template x-if="bp.products && bp.products.length > 0">
+                                                        <span class="bp-produces">
+                                                            Produces: <span x-text="bp.products.map(p => (p.quantity > 1 ? p.quantity + 'x ' : '') + p.type_name).join(', ')"></span>
+                                                        </span>
+                                                    </template>
+                                                    <template x-if="bpTotalCost(bp) != null">
+                                                        <span class="bp-total-cost">
+                                                            Total: <span x-text="formatISK(bpTotalCost(bp)) + ' ISK'"></span>
+                                                        </span>
+                                                    </template>
+                                                    <span class="bp-prices-loading" x-show="loadingPrices">Loading prices...</span>
+                                                </span>
+                                            </div>
+                                            <table class="bp-materials-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Qty</th>
+                                                        <th>Material</th>
+                                                        <th>Sell</th>
+                                                        <th>Buy</th>
+                                                        <th>Line Total</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <template x-for="mat in bp.materials" :key="mat.type_id">
+                                                        <tr>
+                                                            <td class="bp-material-qty" x-text="formatQuantity(mat.quantity)"></td>
+                                                            <td x-text="mat.type_name"></td>
+                                                            <td class="bp-price" x-text="matSellPrice(mat) != null ? formatISK(matSellPrice(mat)) : '—'"></td>
+                                                            <td class="bp-price" x-text="materialPrices[mat.type_id]?.buy != null ? formatISK(materialPrices[mat.type_id].buy) : '—'"></td>
+                                                            <td class="bp-price bp-line-total" x-text="matTotalCost(mat) != null ? formatISK(matTotalCost(mat)) : '—'"></td>
+                                                        </tr>
+                                                    </template>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </template>
                 </table>
             </div>
         </section>

@@ -57,3 +57,4 @@ env/
 # Add any sensitive files or files containing secrets/API keys here
 
 .env
+/sde/

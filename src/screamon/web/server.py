@@ -18,6 +18,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 def create_app(
     config_path: str = "config.json",
     db_path: str = "screamon.db",
+    sde_path: str = "sde",
 ) -> Litestar:
     """
     Create the Litestar application.
@@ -25,6 +26,7 @@ def create_app(
     Args:
         config_path: Path to config file
         db_path: Path to database
+        sde_path: Path to SDE data directory
 
     Returns:
         Configured Litestar app
@@ -32,6 +34,20 @@ def create_app(
     # Initialize shared state
     config = AppConfig.load(config_path)
     db = Database(db_path)
+
+    # Load SDE data
+    from ..sde import SDEData
+
+    sde = SDEData(sde_path)
+    if Path(sde_path).exists():
+        sde.load()
+    else:
+        logger.warning("SDE directory not found at %s — material data unavailable", sde_path)
+
+    # Initialize market service
+    from ..market import MarketService
+
+    market = MarketService()
 
     # Import routes here to avoid circular imports
     from .routes import create_routes
@@ -44,7 +60,7 @@ def create_app(
 
     encryption_key = db.get_or_create_encryption_key()
     esi_auth = ESIAuth(config.esi, encryption_key)
-    esi_routes = create_esi_routes(config, db, esi_auth)
+    esi_routes = create_esi_routes(config, db, esi_auth, sde, market)
     route_handlers.extend(esi_routes)
     if config.esi.client_id:
         logger.info("ESI routes enabled for client_id=%s...", config.esi.client_id[:8])
@@ -69,6 +85,7 @@ def run_server(
     db_path: str = "screamon.db",
     host: str = "127.0.0.1",
     port: int = 8080,
+    sde_path: str = "sde",
 ) -> None:
     """
     Run the web server.
@@ -78,6 +95,7 @@ def run_server(
         db_path: Path to database
         host: Host to bind to
         port: Port to listen on
+        sde_path: Path to SDE data directory
     """
     import uvicorn
 
@@ -87,7 +105,7 @@ def run_server(
     print("Press Ctrl+C to stop\n")
 
     # Create app
-    app = create_app(config_path=config_path, db_path=db_path)
+    app = create_app(config_path=config_path, db_path=db_path, sde_path=sde_path)
 
     # Run with uvicorn
     uvicorn.run(

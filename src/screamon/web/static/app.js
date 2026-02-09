@@ -9,6 +9,10 @@ function dashboard() {
         config: { refresh_rate: 3 },
         esi: { configured: false, characters: [] },
         blueprints: [],
+        showDistinct: false,
+        expandedBp: null,
+        materialPrices: {},
+        loadingPrices: false,
         esiMessage: '',
         loading: { detectors: true, events: true, esi: true, blueprints: false },
 
@@ -90,6 +94,20 @@ function dashboard() {
             } finally {
                 this.loading.blueprints = false;
             }
+        },
+
+        get filteredBlueprints() {
+            if (!this.showDistinct) return this.blueprints;
+            const seen = new Map();
+            for (const bp of this.blueprints) {
+                const key = bp.type_id;
+                if (seen.has(key)) {
+                    seen.get(key).count++;
+                } else {
+                    seen.set(key, { ...bp, count: 1 });
+                }
+            }
+            return Array.from(seen.values());
         },
 
         // Actions
@@ -189,6 +207,73 @@ function dashboard() {
 
         bpRuns(bp) {
             return bp.runs === -1 ? '∞' : bp.runs;
+        },
+
+        async toggleBpMaterials(bp) {
+            const key = this.showDistinct ? bp.type_id : bp.item_id;
+            if (this.expandedBp === key) {
+                this.expandedBp = null;
+                return;
+            }
+            this.expandedBp = key;
+
+            // Fetch prices for materials if we have them
+            if (bp.materials && bp.materials.length > 0) {
+                const needed = bp.materials
+                    .map(m => m.type_id)
+                    .filter(id => !(id in this.materialPrices));
+                if (needed.length > 0) {
+                    this.loadingPrices = true;
+                    try {
+                        const data = await this.fetchAPI(
+                            `/market/prices?type_ids=${needed.join(',')}`
+                        );
+                        Object.assign(this.materialPrices, data.prices);
+                    } catch (e) {
+                        console.error('Failed to load prices', e);
+                    } finally {
+                        this.loadingPrices = false;
+                    }
+                }
+            }
+        },
+
+        isBpExpanded(bp) {
+            const key = this.showDistinct ? bp.type_id : bp.item_id;
+            return this.expandedBp === key;
+        },
+
+        matSellPrice(mat) {
+            const p = this.materialPrices[mat.type_id];
+            return p && p.sell != null ? p.sell : null;
+        },
+
+        matTotalCost(mat) {
+            const price = this.matSellPrice(mat);
+            return price != null ? price * mat.quantity : null;
+        },
+
+        bpTotalCost(bp) {
+            if (!bp.materials) return null;
+            let total = 0;
+            for (const mat of bp.materials) {
+                const cost = this.matTotalCost(mat);
+                if (cost == null) return null;
+                total += cost;
+            }
+            return total;
+        },
+
+        formatISK(value) {
+            if (value == null) return '—';
+            if (value >= 1e9) return (value / 1e9).toFixed(2) + 'B';
+            if (value >= 1e6) return (value / 1e6).toFixed(2) + 'M';
+            if (value >= 1e3) return (value / 1e3).toFixed(1) + 'K';
+            return value.toFixed(2);
+        },
+
+        formatQuantity(n) {
+            return n.toLocaleString();
         },
     };
 }

@@ -88,6 +88,11 @@ def run_web() -> None:
         help="Host to bind to (default: 127.0.0.1)"
     )
     parser.add_argument(
+        "-s", "--sde",
+        default="sde",
+        help="Path to SDE data directory (default: sde)"
+    )
+    parser.add_argument(
         "-v", "--verbose",
         action="store_true",
         help="Enable verbose logging"
@@ -120,6 +125,7 @@ def run_web() -> None:
         db_path=args.database,
         host=args.host,
         port=args.port,
+        sde_path=args.sde,
     )
 
 

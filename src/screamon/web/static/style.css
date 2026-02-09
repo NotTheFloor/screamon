@@ -348,7 +348,13 @@ button:disabled {
     min-height: 1.2em;
 }
 
-/* Blueprints Table */
+/* Blueprints */
+.blueprints-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
 .blueprints-table-wrap {
     max-height: 400px;
     overflow-y: auto;
@@ -395,6 +401,98 @@ button:disabled {
     background-color: var(--primary-color);
     color: #f5a623;
     border: 1px solid #f5a623;
+}
+
+.bp-expand-icon {
+    width: 1.5rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.bp-row:hover {
+    background-color: rgba(233, 69, 96, 0.05);
+}
+
+.bp-row.bp-expanded {
+    background-color: rgba(233, 69, 96, 0.08);
+}
+
+.bp-materials-row td {
+    padding: 0 !important;
+    border-bottom: 1px solid var(--accent-color);
+}
+
+.bp-materials {
+    padding: 0.5rem 0.75rem 0.75rem;
+    background-color: rgba(15, 52, 96, 0.5);
+}
+
+.bp-materials-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8rem;
+    color: var(--accent-color);
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+}
+
+.bp-materials-header-right {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.bp-produces {
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+.bp-total-cost {
+    color: #6ecbf5;
+    font-weight: 600;
+}
+
+.bp-prices-loading {
+    color: var(--text-muted);
+    font-weight: 400;
+    font-style: italic;
+}
+
+.bp-materials-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.bp-materials-table th {
+    text-align: left;
+    padding: 0.25rem 0.5rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 0.75rem;
+    border-bottom: 1px solid var(--primary-color);
+}
+
+.bp-materials-table td {
+    padding: 0.2rem 0.5rem;
+}
+
+.bp-material-qty {
+    color: var(--accent-color);
+    font-weight: 600;
+    text-align: right;
+}
+
+.bp-price {
+    text-align: right;
+    color: var(--text-muted);
+}
+
+.bp-line-total {
+    color: #6ecbf5;
+    font-weight: 600;
 }
 
 /* Loading State */
