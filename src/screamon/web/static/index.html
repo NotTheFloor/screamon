@@ -96,17 +96,97 @@
             <h2>
                 Blueprints
                 <span x-show="blueprints.length > 0" style="font-size: 0.85rem; color: var(--text-muted); font-weight: 400;"
-                      x-text="'(' + blueprints.length + ')'"></span>
+                      x-text="'(' + filteredBlueprints.length + (filteredBlueprints.length !== blueprints.length ? ' / ' + blueprints.length : '') + ')'"></span>
             </h2>
             <div class="blueprints-controls">
                 <button @click="loadBlueprints()" :disabled="loading.blueprints"
                         x-text="loading.blueprints ? 'Loading...' : 'Load Blueprints'"></button>
-                <label class="toggle" x-show="blueprints.length > 0">
-                    <input type="checkbox" x-model="showDistinct">
-                    <span class="slider"></span>
-                    Distinct
+                <div class="bp-filters" x-show="blueprints.length > 0">
+                    <label class="toggle">
+                        <input type="checkbox" x-model="showBPO">
+                        <span class="slider"></span>
+                        BPO
+                    </label>
+                    <label class="toggle">
+                        <input type="checkbox" x-model="showBPC">
+                        <span class="slider"></span>
+                        BPC
+                    </label>
+                    <label class="toggle">
+                        <input type="checkbox" x-model="showReactions">
+                        <span class="slider"></span>
+                        Reactions
+                    </label>
+                    <label class="toggle">
+                        <input type="checkbox" x-model="showInvention">
+                        <span class="slider"></span>
+                        Invention
+                    </label>
+                    <label class="toggle">
+                        <input type="checkbox" x-model="showDistinct">
+                        <span class="slider"></span>
+                        Distinct
+                    </label>
+                    <span class="bp-sort-group">
+                        <button class="bp-sort-btn" :class="{ active: sortMode === 'name' }"
+                                :disabled="bulkLoading"
+                                @click="bulkLoadForSort('name')">Name</button>
+                        <button class="bp-sort-btn" :class="{ active: sortMode === 'max_profit' }"
+                                :disabled="bulkLoading"
+                                @click="bulkLoadForSort('max_profit')">Max Profit</button>
+                        <button class="bp-sort-btn" :class="{ active: sortMode === 'min_profit' }"
+                                :disabled="bulkLoading"
+                                @click="bulkLoadForSort('min_profit')">Best Worst</button>
+                    </span>
+                </div>
+            </div>
+
+            <!-- Facility Selector -->
+            <div class="facility-bar" x-show="blueprints.length > 0" x-cloak>
+                <select @change="selectFacility($event.target.value)">
+                    <option value="">None / NPC Station</option>
+                    <template x-for="f in facilities" :key="f.id">
+                        <option :value="f.id" :selected="selectedFacilityId === f.id" x-text="f.name"></option>
+                    </template>
+                </select>
+                <button class="secondary" @click="openFacilityEditor(null)">New Facility</button>
+                <button class="secondary" x-show="selectedFacility" @click="openFacilityEditor(selectedFacility)">Edit</button>
+                <div class="facility-info" x-show="selectedFacility">
+                    <span class="facility-info-item" x-text="facilityStructureName()"></span>
+                    <span class="facility-info-item" x-text="selectedFacility?.system_name"></span>
+                    <template x-if="facilitySystemSecurity">
+                        <span class="facility-info-item" x-text="facilitySecLabel() + ' (' + facilitySystemSecurity.security?.toFixed(2) + ') ' + facilitySystemSecurity.rig_multiplier + 'x'"></span>
+                    </template>
+                    <span class="facility-info-item" x-show="selectedFacility?.facility_tax > 0"
+                          x-text="'Tax: ' + (selectedFacility?.facility_tax * 100).toFixed(1) + '%'"></span>
+                </div>
+            </div>
+
+            <!-- Settings Bar -->
+            <div class="settings-bar" x-show="blueprints.length > 0" x-cloak>
+                <span class="settings-label">Trade Settings:</span>
+                <label class="settings-input-group">
+                    Sales Tax %
+                    <input type="number" min="0" max="20" step="0.1"
+                           :value="(salesTaxRate * 100).toFixed(1)"
+                           @change="salesTaxRate = parseFloat($event.target.value) / 100; saveSettings()">
+                </label>
+                <label class="settings-input-group">
+                    Broker Fee %
+                    <input type="number" min="0" max="20" step="0.1"
+                           :value="(brokerFeeRate * 100).toFixed(1)"
+                           @change="brokerFeeRate = parseFloat($event.target.value) / 100; saveSettings()">
                 </label>
             </div>
+
+            <!-- Bulk Price Loading Progress -->
+            <div class="bulk-progress-bar" x-show="bulkLoading" x-cloak>
+                <div class="bulk-progress-track">
+                    <div class="bulk-progress-fill" :style="'width: ' + bulkProgress + '%'"></div>
+                </div>
+                <span class="bulk-progress-label" x-text="bulkProgressLabel"></span>
+            </div>
+
             <div class="blueprints-table-wrap" x-show="blueprints.length > 0" x-cloak>
                 <table class="blueprints-table">
                     <thead>
@@ -120,7 +200,7 @@
                             <th>Runs</th>
                         </tr>
                     </thead>
-                    <template x-for="bp in filteredBlueprints" :key="bp.item_id || bp.type_id">
+                    <template x-for="bp in filteredBlueprints" :key="bp._distinctKey || bp.item_id || bp.type_id">
                         <tbody>
                             <tr class="bp-row" :class="{ 'bp-expanded': isBpExpanded(bp) }"
                                 @click="bp.materials && toggleBpMaterials(bp)"
@@ -128,8 +208,9 @@
                                 <td class="bp-expand-icon" x-text="bp.materials ? (isBpExpanded(bp) ? '▾' : '▸') : ''"></td>
                                 <td x-text="bp.type_name"></td>
                                 <td>
-                                    <span class="bp-badge" :class="bp.copy ? 'bpc' : 'bpo'"
+                                    <span class="bp-badge" :class="bpKind(bp)"
                                           x-text="bpLabel(bp)"></span>
+                                    <span class="bp-badge invention" x-show="bpHasInvention(bp)">INV</span>
                                 </td>
                                 <td x-show="showDistinct" x-text="bp.count || 1"></td>
                                 <td x-text="bp.material_efficiency + '%'"></td>
@@ -141,44 +222,347 @@
                                     <td></td>
                                     <td :colspan="showDistinct ? 6 : 5">
                                         <div class="bp-materials">
-                                            <div class="bp-materials-header">
-                                                <span>Manufacturing Materials</span>
-                                                <span class="bp-materials-header-right">
-                                                    <template x-if="bp.products && bp.products.length > 0">
-                                                        <span class="bp-produces">
-                                                            Produces: <span x-text="bp.products.map(p => (p.quantity > 1 ? p.quantity + 'x ' : '') + p.type_name).join(', ')"></span>
-                                                        </span>
-                                                    </template>
-                                                    <template x-if="bpTotalCost(bp) != null">
-                                                        <span class="bp-total-cost">
-                                                            Total: <span x-text="formatISK(bpTotalCost(bp)) + ' ISK'"></span>
-                                                        </span>
-                                                    </template>
-                                                    <span class="bp-prices-loading" x-show="loadingPrices">Loading prices...</span>
-                                                </span>
+                                            <!-- Activity Tabs (only for inventable BPs) -->
+                                            <div class="bp-activity-tabs" x-show="bpHasInvention(bp)">
+                                                <button class="bp-tab" :class="{ active: !isInventionMode(bp) }"
+                                                        @click="setActivityMode(bp, 'manufacturing')">Manufacturing</button>
+                                                <button class="bp-tab" :class="{ active: isInventionMode(bp) }"
+                                                        @click="setActivityMode(bp, 'invention')">Invention</button>
                                             </div>
-                                            <table class="bp-materials-table">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Qty</th>
-                                                        <th>Material</th>
-                                                        <th>Sell</th>
-                                                        <th>Buy</th>
-                                                        <th>Line Total</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <template x-for="mat in bp.materials" :key="mat.type_id">
-                                                        <tr>
-                                                            <td class="bp-material-qty" x-text="formatQuantity(mat.quantity)"></td>
-                                                            <td x-text="mat.type_name"></td>
-                                                            <td class="bp-price" x-text="matSellPrice(mat) != null ? formatISK(matSellPrice(mat)) : '—'"></td>
-                                                            <td class="bp-price" x-text="materialPrices[mat.type_id]?.buy != null ? formatISK(materialPrices[mat.type_id].buy) : '—'"></td>
-                                                            <td class="bp-price bp-line-total" x-text="matTotalCost(mat) != null ? formatISK(matTotalCost(mat)) : '—'"></td>
-                                                        </tr>
+
+                                            <!-- Manufacturing View -->
+                                            <template x-if="!isInventionMode(bp)">
+                                                <div>
+                                                    <div class="bp-materials-header">
+                                                        <span x-text="bp.activity_type === 'reaction' ? 'Reaction Materials' : 'Manufacturing Materials'"></span>
+                                                        <span class="bp-materials-header-right">
+                                                            <template x-if="bp.products && bp.products.length > 0">
+                                                                <span class="bp-produces">
+                                                                    Produces: <span x-text="bp.products.map(p => (p.quantity > 1 ? p.quantity + 'x ' : '') + p.type_name).join(', ')"></span>
+                                                                </span>
+                                                            </template>
+                                                            <template x-if="bpTotalCost(bp) != null">
+                                                                <span class="bp-total-cost">
+                                                                    Total: <span x-text="formatISK(bpTotalCost(bp)) + ' ISK'"></span>
+                                                                </span>
+                                                            </template>
+                                                            <span class="bp-prices-loading" x-show="loadingPrices">Loading prices...</span>
+                                                        </span>
+                                                    </div>
+                                                    <div class="bp-cost-summary" x-show="bpEIV(bp) != null || systemCostIndex != null || reactionSystemCostIndex != null">
+                                                        <template x-if="bp.activity_type === 'reaction'">
+                                                            <span class="bp-cost-item">
+                                                                <span class="bp-cost-label bp-reaction-badge">Reaction</span>
+                                                            </span>
+                                                        </template>
+                                                        <template x-if="bpEIV(bp) != null">
+                                                            <span class="bp-cost-item">
+                                                                <span class="bp-cost-label">EIV</span>
+                                                                <span class="bp-cost-value" x-text="formatISK(bpEIV(bp)) + ' ISK'"></span>
+                                                            </span>
+                                                        </template>
+                                                        <template x-if="bp.activity_type !== 'reaction' && systemCostIndex != null">
+                                                            <span class="bp-cost-item">
+                                                                <span class="bp-cost-label" x-text="systemName + ' SCI'"></span>
+                                                                <span class="bp-cost-value" x-text="formatPercent(systemCostIndex)"></span>
+                                                            </span>
+                                                        </template>
+                                                        <template x-if="bp.activity_type === 'reaction' && reactionSystemCostIndex != null">
+                                                            <span class="bp-cost-item">
+                                                                <span class="bp-cost-label" x-text="reactionSystemName + ' SCI'"></span>
+                                                                <span class="bp-cost-value" x-text="formatPercent(reactionSystemCostIndex)"></span>
+                                                            </span>
+                                                        </template>
+                                                        <template x-if="bpJobCost(bp) != null">
+                                                            <span class="bp-cost-item bp-cost-highlight">
+                                                                <span class="bp-cost-label">Job Cost</span>
+                                                                <span class="bp-cost-value" x-text="formatISK(bpJobCost(bp)) + ' ISK'"></span>
+                                                            </span>
+                                                        </template>
+                                                    </div>
+                                                    <table class="bp-materials-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Qty</th>
+                                                                <th>Material</th>
+                                                                <th>Sell</th>
+                                                                <th>Buy</th>
+                                                                <th>Line Total</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            <template x-for="mat in bp.materials" :key="mat.type_id">
+                                                                <tr>
+                                                                    <td class="bp-material-qty">
+                                                                        <span x-text="formatQuantity(adjustedMatQuantity(bp, mat))"></span>
+                                                                        <span class="bp-mat-base-qty"
+                                                                              x-show="adjustedMatQuantity(bp, mat) !== mat.quantity"
+                                                                              x-text="'(' + formatQuantity(mat.quantity) + ')'"></span>
+                                                                    </td>
+                                                                    <td x-text="mat.type_name"></td>
+                                                                    <td class="bp-price" x-text="matSellPrice(mat) != null ? formatISK(matSellPrice(mat)) : '\u2014'"></td>
+                                                                    <td class="bp-price" x-text="materialPrices[mat.type_id]?.buy != null ? formatISK(materialPrices[mat.type_id].buy) : '\u2014'"></td>
+                                                                    <td class="bp-price bp-line-total" x-text="matTotalCost(bp, mat) != null ? formatISK(matTotalCost(bp, mat)) : '\u2014'"></td>
+                                                                </tr>
+                                                            </template>
+                                                        </tbody>
+                                                    </table>
+
+                                                    <!-- Profit Section -->
+                                                    <template x-if="productSellPrice(bp) != null || productBuyPrice(bp) != null">
+                                                        <div class="bp-profit-section">
+                                                            <div class="bp-profit-header">
+                                                                <span>Profit Analysis</span>
+                                                                <span class="bp-profit-product-info" x-show="bp.products && bp.products.length > 0">
+                                                                    <span x-text="bp.products[0].type_name"></span>
+                                                                    <span x-show="productQuantity(bp) > 1" x-text="'x' + productQuantity(bp)"></span>
+                                                                    &mdash;
+                                                                    Sell: <span class="bp-profit-price" x-text="productSellPrice(bp) != null ? formatISK(productSellPrice(bp)) : '\u2014'"></span>
+                                                                    Buy: <span class="bp-profit-price" x-text="productBuyPrice(bp) != null ? formatISK(productBuyPrice(bp)) : '\u2014'"></span>
+                                                                </span>
+                                                            </div>
+
+                                                            <!-- 2x2 Profit Grid -->
+                                                            <table class="bp-profit-table">
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th></th>
+                                                                        <th>Instant Sell</th>
+                                                                        <th>Sell Order</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    <tr>
+                                                                        <td class="bp-profit-row-label">Instant Buy</td>
+                                                                        <td>
+                                                                            <template x-if="bpProfit(bp, 'sell', 'sell')">
+                                                                                <span :class="bpProfit(bp, 'sell', 'sell').profit >= 0 ? 'profit-positive' : 'profit-negative'">
+                                                                                    <span x-text="formatISK(bpProfit(bp, 'sell', 'sell').profit) + ' ISK'"></span>
+                                                                                    <span class="bp-profit-margin" x-text="'(' + (bpProfit(bp, 'sell', 'sell').margin * 100).toFixed(1) + '%)'"></span>
+                                                                                </span>
+                                                                            </template>
+                                                                            <template x-if="!bpProfit(bp, 'sell', 'sell')">
+                                                                                <span class="bp-profit-na">&mdash;</span>
+                                                                            </template>
+                                                                        </td>
+                                                                        <td>
+                                                                            <template x-if="bpProfit(bp, 'sell', 'order')">
+                                                                                <span :class="bpProfit(bp, 'sell', 'order').profit >= 0 ? 'profit-positive' : 'profit-negative'">
+                                                                                    <span x-text="formatISK(bpProfit(bp, 'sell', 'order').profit) + ' ISK'"></span>
+                                                                                    <span class="bp-profit-margin" x-text="'(' + (bpProfit(bp, 'sell', 'order').margin * 100).toFixed(1) + '%)'"></span>
+                                                                                </span>
+                                                                            </template>
+                                                                            <template x-if="!bpProfit(bp, 'sell', 'order')">
+                                                                                <span class="bp-profit-na">&mdash;</span>
+                                                                            </template>
+                                                                        </td>
+                                                                    </tr>
+                                                                    <tr>
+                                                                        <td class="bp-profit-row-label">Buy Order</td>
+                                                                        <td>
+                                                                            <template x-if="bpProfit(bp, 'buy', 'sell')">
+                                                                                <span :class="bpProfit(bp, 'buy', 'sell').profit >= 0 ? 'profit-positive' : 'profit-negative'">
+                                                                                    <span x-text="formatISK(bpProfit(bp, 'buy', 'sell').profit) + ' ISK'"></span>
+                                                                                    <span class="bp-profit-margin" x-text="'(' + (bpProfit(bp, 'buy', 'sell').margin * 100).toFixed(1) + '%)'"></span>
+                                                                                </span>
+                                                                            </template>
+                                                                            <template x-if="!bpProfit(bp, 'buy', 'sell')">
+                                                                                <span class="bp-profit-na">&mdash;</span>
+                                                                            </template>
+                                                                        </td>
+                                                                        <td>
+                                                                            <template x-if="bpProfit(bp, 'buy', 'order')">
+                                                                                <span :class="bpProfit(bp, 'buy', 'order').profit >= 0 ? 'profit-positive' : 'profit-negative'">
+                                                                                    <span x-text="formatISK(bpProfit(bp, 'buy', 'order').profit) + ' ISK'"></span>
+                                                                                    <span class="bp-profit-margin" x-text="'(' + (bpProfit(bp, 'buy', 'order').margin * 100).toFixed(1) + '%)'"></span>
+                                                                                </span>
+                                                                            </template>
+                                                                            <template x-if="!bpProfit(bp, 'buy', 'order')">
+                                                                                <span class="bp-profit-na">&mdash;</span>
+                                                                            </template>
+                                                                        </td>
+                                                                    </tr>
+                                                                </tbody>
+                                                            </table>
+
+                                                            <!-- Detailed Breakdown (Instant Buy + Sell Order) -->
+                                                            <template x-if="bpProfit(bp, 'sell', 'order')">
+                                                                <div class="bp-profit-breakdown">
+                                                                    <span class="bp-profit-breakdown-title">Breakdown (Instant Buy + Sell Order):</span>
+                                                                    <div class="bp-profit-breakdown-items">
+                                                                        <span class="bp-breakdown-item">
+                                                                            <span class="bp-breakdown-label">Materials</span>
+                                                                            <span class="bp-breakdown-value" x-text="formatISK(bpProfit(bp, 'sell', 'order').materialCost) + ' ISK'"></span>
+                                                                        </span>
+                                                                        <span class="bp-breakdown-item">
+                                                                            <span class="bp-breakdown-label">Job Cost</span>
+                                                                            <span class="bp-breakdown-value" x-text="formatISK(bpProfit(bp, 'sell', 'order').jobCost) + ' ISK'"></span>
+                                                                        </span>
+                                                                        <template x-if="bpProfit(bp, 'sell', 'order').inventionCost > 0">
+                                                                            <span class="bp-breakdown-item">
+                                                                                <span class="bp-breakdown-label">Invention</span>
+                                                                                <span class="bp-breakdown-value" x-text="formatISK(bpProfit(bp, 'sell', 'order').inventionCost) + ' ISK'"></span>
+                                                                            </span>
+                                                                        </template>
+                                                                        <span class="bp-breakdown-item">
+                                                                            <span class="bp-breakdown-label">Sales Tax</span>
+                                                                            <span class="bp-breakdown-value" x-text="formatISK(bpProfit(bp, 'sell', 'order').salesTax) + ' ISK'"></span>
+                                                                        </span>
+                                                                        <span class="bp-breakdown-item">
+                                                                            <span class="bp-breakdown-label">Broker Fee</span>
+                                                                            <span class="bp-breakdown-value" x-text="formatISK(bpProfit(bp, 'sell', 'order').sellBrokerFee) + ' ISK'"></span>
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            </template>
+                                                        </div>
                                                     </template>
-                                                </tbody>
-                                            </table>
+                                                </div>
+                                            </template>
+
+                                            <!-- Invention View -->
+                                            <template x-if="isInventionMode(bp) && inventionData[bp.type_id]">
+                                                <div>
+                                                    <!-- T2 Product Selector (multi-product BPs) -->
+                                                    <div class="bp-invention-product-selector" x-show="inventionData[bp.type_id]?.products?.length > 1">
+                                                        <label>
+                                                            T2 Product:
+                                                            <select @change="selectedT2Product[bp.type_id] = parseInt($event.target.value); onT2ProductChange(bp)">
+                                                                <template x-for="prod in inventionData[bp.type_id]?.products || []" :key="prod.type_id">
+                                                                    <option :value="prod.type_id"
+                                                                            :selected="selectedT2Product[bp.type_id] === prod.type_id"
+                                                                            x-text="prod.type_name"></option>
+                                                                </template>
+                                                            </select>
+                                                        </label>
+                                                    </div>
+
+                                                    <!-- Probability & Output -->
+                                                    <div class="bp-cost-summary">
+                                                        <span class="bp-cost-item">
+                                                            <span class="bp-cost-label bp-invention-badge">Invention</span>
+                                                        </span>
+                                                        <span class="bp-cost-item">
+                                                            <span class="bp-cost-label">Base Prob</span>
+                                                            <span class="bp-cost-value" x-text="formatPercent(inventionProbability(bp).base)"></span>
+                                                        </span>
+                                                        <template x-if="characterSkillsLoaded">
+                                                            <span class="bp-cost-item bp-cost-highlight">
+                                                                <span class="bp-cost-label">Your Prob</span>
+                                                                <span class="bp-cost-value" x-text="formatPercent(inventionProbability(bp).character)"></span>
+                                                            </span>
+                                                        </template>
+                                                        <span class="bp-cost-item">
+                                                            <span class="bp-cost-label">Max Skill</span>
+                                                            <span class="bp-cost-value" x-text="formatPercent(inventionProbability(bp).maxSkill)"></span>
+                                                        </span>
+                                                        <span class="bp-cost-item">
+                                                            <span class="bp-cost-label">Output</span>
+                                                            <span class="bp-cost-value"
+                                                                  x-text="'ME ' + inventionOutput(bp).me + ' / TE ' + inventionOutput(bp).te + ' / ' + inventionOutput(bp).runs + ' run' + (inventionOutput(bp).runs !== 1 ? 's' : '')"></span>
+                                                        </span>
+                                                    </div>
+
+                                                    <!-- Cost Summary -->
+                                                    <div class="bp-cost-summary" x-show="inventionEIV(bp) != null || inventionSCI != null">
+                                                        <template x-if="inventionEIV(bp) != null">
+                                                            <span class="bp-cost-item">
+                                                                <span class="bp-cost-label">EIV (T2)</span>
+                                                                <span class="bp-cost-value" x-text="formatISK(inventionEIV(bp)) + ' ISK'"></span>
+                                                            </span>
+                                                        </template>
+                                                        <template x-if="inventionSCI != null">
+                                                            <span class="bp-cost-item">
+                                                                <span class="bp-cost-label" x-text="systemName + ' Inv SCI'"></span>
+                                                                <span class="bp-cost-value" x-text="formatPercent(inventionSCI)"></span>
+                                                            </span>
+                                                        </template>
+                                                        <template x-if="inventionJobCost(bp) != null">
+                                                            <span class="bp-cost-item bp-cost-highlight">
+                                                                <span class="bp-cost-label">Job Cost</span>
+                                                                <span class="bp-cost-value" x-text="formatISK(inventionJobCost(bp)) + ' ISK'"></span>
+                                                            </span>
+                                                        </template>
+                                                        <template x-if="inventionAttemptCost(bp) != null">
+                                                            <span class="bp-cost-item">
+                                                                <span class="bp-cost-label">Per Attempt</span>
+                                                                <span class="bp-cost-value" x-text="formatISK(inventionAttemptCost(bp)) + ' ISK'"></span>
+                                                            </span>
+                                                        </template>
+                                                        <template x-if="inventionExpectedCostPerSuccess(bp) != null">
+                                                            <span class="bp-cost-item bp-invention-expected">
+                                                                <span class="bp-cost-label">Expected/Success</span>
+                                                                <span class="bp-cost-value" x-text="formatISK(inventionExpectedCostPerSuccess(bp)) + ' ISK'"></span>
+                                                            </span>
+                                                        </template>
+                                                    </div>
+
+                                                    <!-- Decryptor Selector -->
+                                                    <div class="bp-decryptor-selector">
+                                                        <label>
+                                                            Decryptor:
+                                                            <select @change="selectedDecryptor[bp.type_id] = $event.target.value ? parseInt($event.target.value) : ''">
+                                                                <option value="">None</option>
+                                                                <template x-for="[id, dec] in Object.entries(decryptors)" :key="id">
+                                                                    <option :value="id"
+                                                                            :selected="selectedDecryptor[bp.type_id] == id"
+                                                                            x-text="dec.name + ' (P:' + dec.prob_mult.toFixed(1) + ' ME:' + (dec.me_mod >= 0 ? '+' : '') + dec.me_mod + ' TE:' + (dec.te_mod >= 0 ? '+' : '') + dec.te_mod + ' R:' + (dec.run_mod >= 0 ? '+' : '') + dec.run_mod + ')'"></option>
+                                                                </template>
+                                                            </select>
+                                                        </label>
+                                                    </div>
+
+                                                    <!-- Input Materials Table -->
+                                                    <table class="bp-materials-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Qty</th>
+                                                                <th>Material</th>
+                                                                <th>Sell</th>
+                                                                <th>Line Total</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            <template x-for="mat in inventionData[bp.type_id]?.materials || []" :key="mat.type_id">
+                                                                <tr>
+                                                                    <td class="bp-material-qty" x-text="formatQuantity(mat.quantity)"></td>
+                                                                    <td x-text="mat.type_name"></td>
+                                                                    <td class="bp-price" x-text="materialPrices[mat.type_id]?.sell != null ? formatISK(materialPrices[mat.type_id].sell) : '\u2014'"></td>
+                                                                    <td class="bp-price bp-line-total" x-text="materialPrices[mat.type_id]?.sell != null ? formatISK(materialPrices[mat.type_id].sell * mat.quantity) : '\u2014'"></td>
+                                                                </tr>
+                                                            </template>
+                                                            <template x-if="selectedDecryptor[bp.type_id]">
+                                                                <tr>
+                                                                    <td class="bp-material-qty">1</td>
+                                                                    <td x-text="decryptors[String(selectedDecryptor[bp.type_id])]?.name || 'Decryptor'"></td>
+                                                                    <td class="bp-price" x-text="materialPrices[selectedDecryptor[bp.type_id]]?.sell != null ? formatISK(materialPrices[selectedDecryptor[bp.type_id]].sell) : '\u2014'"></td>
+                                                                    <td class="bp-price bp-line-total" x-text="materialPrices[selectedDecryptor[bp.type_id]]?.sell != null ? formatISK(materialPrices[selectedDecryptor[bp.type_id]].sell) : '\u2014'"></td>
+                                                                </tr>
+                                                            </template>
+                                                        </tbody>
+                                                    </table>
+
+                                                    <!-- Required Skills -->
+                                                    <div class="bp-invention-skills" x-show="inventionData[bp.type_id]?.skills?.length > 0">
+                                                        <span class="bp-cost-label">Required Skills:</span>
+                                                        <template x-for="skill in inventionData[bp.type_id]?.skills || []" :key="skill.type_id">
+                                                            <span class="bp-skill-tag"
+                                                                  :class="characterSkillsLoaded ? (characterSkillLevel(skill.type_id) >= skill.level ? 'met' : 'unmet') : ''">
+                                                                <span x-text="skill.type_name + ' ' + skill.level"></span>
+                                                                <template x-if="characterSkillsLoaded">
+                                                                    <span class="skill-level" x-text="'(Lv ' + characterSkillLevel(skill.type_id) + ')'"></span>
+                                                                </template>
+                                                            </span>
+                                                        </template>
+                                                    </div>
+
+                                                    <!-- Invention Time -->
+                                                    <div class="bp-invention-time" x-show="inventionData[bp.type_id]?.time">
+                                                        <span class="bp-cost-label">Time:</span>
+                                                        <span x-text="formatDuration(inventionData[bp.type_id]?.time)"></span>
+                                                    </div>
+                                                </div>
+                                            </template>
                                         </div>
                                     </td>
                                 </tr>
@@ -201,6 +585,70 @@
                 <button @click="saveConfig()">Save</button>
             </div>
         </section>
+
+        <!-- Facility Editor Modal -->
+        <div class="modal-overlay" x-show="showFacilityEditor" x-cloak @click.self="closeFacilityEditor()">
+            <div class="modal">
+                <h3 x-text="editingFacility ? 'Edit Facility' : 'New Facility'"></h3>
+                <div class="facility-form">
+                    <label>
+                        Name
+                        <input type="text" x-model="facilityForm.name" placeholder="My Raitaru">
+                    </label>
+                    <label>
+                        Structure
+                        <select x-model="facilityForm.structure_type_id">
+                            <option value="">Select structure...</option>
+                            <template x-for="[id, s] in Object.entries(structures)" :key="id">
+                                <option :value="id" x-text="s.name"></option>
+                            </template>
+                        </select>
+                    </label>
+                    <label>
+                        System Name
+                        <input type="text" x-model="facilityForm.system_name" placeholder="Jita">
+                    </label>
+                    <label>
+                        Rig Slot 1
+                        <select x-model="facilityForm.rig1_type_id">
+                            <option value="">Empty</option>
+                            <template x-for="[id, r] in Object.entries(filteredRigs)" :key="id">
+                                <option :value="id" x-text="r.name"></option>
+                            </template>
+                        </select>
+                    </label>
+                    <label>
+                        Rig Slot 2
+                        <select x-model="facilityForm.rig2_type_id">
+                            <option value="">Empty</option>
+                            <template x-for="[id, r] in Object.entries(filteredRigs)" :key="id">
+                                <option :value="id" x-text="r.name"></option>
+                            </template>
+                        </select>
+                    </label>
+                    <label>
+                        Rig Slot 3
+                        <select x-model="facilityForm.rig3_type_id">
+                            <option value="">Empty</option>
+                            <template x-for="[id, r] in Object.entries(filteredRigs)" :key="id">
+                                <option :value="id" x-text="r.name"></option>
+                            </template>
+                        </select>
+                    </label>
+                    <label>
+                        Facility Tax (%)
+                        <input type="number" min="0" max="50" step="0.1" x-model="facilityForm.facility_tax">
+                    </label>
+                </div>
+                <div class="modal-actions">
+                    <button @click="saveFacility()">Save</button>
+                    <button class="secondary" @click="closeFacilityEditor()">Cancel</button>
+                    <button class="secondary" style="margin-left: auto; color: var(--error-color);"
+                            x-show="editingFacility"
+                            @click="deleteFacility(editingFacility.id)">Delete</button>
+                </div>
+            </div>
+        </div>
 
         <!-- Recent Events -->
         <section id="events-section">

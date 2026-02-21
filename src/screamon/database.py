@@ -127,6 +127,20 @@ class Database:
                     fernet_key TEXT NOT NULL
                 );
 
+                -- Facilities table (manufacturing structures)
+                CREATE TABLE IF NOT EXISTS facilities (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    structure_type_id INTEGER NOT NULL,
+                    system_name TEXT NOT NULL,
+                    rig1_type_id INTEGER,
+                    rig2_type_id INTEGER,
+                    rig3_type_id INTEGER,
+                    facility_tax REAL NOT NULL DEFAULT 0.0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
                 -- Create indexes for common queries
                 CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp DESC);
                 CREATE INDEX IF NOT EXISTS idx_events_detector ON events(detector);
@@ -153,9 +167,7 @@ class Database:
     def get_detector_state(self, name: str) -> DetectorState | None:
         """Get current state of a detector."""
         with self._connect() as conn:
-            row = conn.execute(
-                "SELECT * FROM detector_state WHERE name = ?", (name,)
-            ).fetchone()
+            row = conn.execute("SELECT * FROM detector_state WHERE name = ?", (name,)).fetchone()
 
             if row is None:
                 return None
@@ -164,24 +176,29 @@ class Database:
                 name=row["name"],
                 enabled=bool(row["enabled"]),
                 value=json.loads(row["value"]) if row["value"] else None,
-                last_changed=datetime.fromisoformat(row["last_changed"]) if row["last_changed"] else None,
+                last_changed=datetime.fromisoformat(row["last_changed"])
+                if row["last_changed"]
+                else None,
                 raw_text=row["raw_text"],
             )
 
     def set_detector_state(self, state: DetectorState) -> None:
         """Update detector state."""
         with self._connect() as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT OR REPLACE INTO detector_state
                 (name, enabled, value, last_changed, raw_text)
                 VALUES (?, ?, ?, ?, ?)
-            """, (
-                state.name,
-                int(state.enabled),
-                json.dumps(state.value) if state.value is not None else None,
-                state.last_changed.isoformat() if state.last_changed else None,
-                state.raw_text,
-            ))
+            """,
+                (
+                    state.name,
+                    int(state.enabled),
+                    json.dumps(state.value) if state.value is not None else None,
+                    state.last_changed.isoformat() if state.last_changed else None,
+                    state.raw_text,
+                ),
+            )
 
     def get_all_detector_states(self) -> list[DetectorState]:
         """Get all detector states."""
@@ -192,7 +209,9 @@ class Database:
                     name=row["name"],
                     enabled=bool(row["enabled"]),
                     value=json.loads(row["value"]) if row["value"] else None,
-                    last_changed=datetime.fromisoformat(row["last_changed"]) if row["last_changed"] else None,
+                    last_changed=datetime.fromisoformat(row["last_changed"])
+                    if row["last_changed"]
+                    else None,
                     raw_text=row["raw_text"],
                 )
                 for row in rows
@@ -203,17 +222,20 @@ class Database:
     def add_event(self, event: Event) -> int:
         """Add a detection event to history."""
         with self._connect() as conn:
-            cursor = conn.execute("""
+            cursor = conn.execute(
+                """
                 INSERT INTO events (detector, event_type, old_value, new_value, timestamp, raw_text)
                 VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                event.detector,
-                event.event_type,
-                json.dumps(event.old_value) if event.old_value is not None else None,
-                json.dumps(event.new_value) if event.new_value is not None else None,
-                event.timestamp.isoformat(),
-                event.raw_text,
-            ))
+            """,
+                (
+                    event.detector,
+                    event.event_type,
+                    json.dumps(event.old_value) if event.old_value is not None else None,
+                    json.dumps(event.new_value) if event.new_value is not None else None,
+                    event.timestamp.isoformat(),
+                    event.raw_text,
+                ),
+            )
             return cursor.lastrowid
 
     def get_recent_events(self, limit: int = 50, detector: str | None = None) -> list[Event]:
@@ -222,12 +244,11 @@ class Database:
             if detector:
                 rows = conn.execute(
                     "SELECT * FROM events WHERE detector = ? ORDER BY timestamp DESC LIMIT ?",
-                    (detector, limit)
+                    (detector, limit),
                 ).fetchall()
             else:
                 rows = conn.execute(
-                    "SELECT * FROM events ORDER BY timestamp DESC LIMIT ?",
-                    (limit,)
+                    "SELECT * FROM events ORDER BY timestamp DESC LIMIT ?", (limit,)
                 ).fetchall()
 
             return [
@@ -250,17 +271,18 @@ class Database:
         now = datetime.now()
         with self._connect() as conn:
             # Try to get existing player
-            row = conn.execute(
-                "SELECT * FROM players WHERE name = ?", (name,)
-            ).fetchone()
+            row = conn.execute("SELECT * FROM players WHERE name = ?", (name,)).fetchone()
 
             if row:
                 # Update existing
-                conn.execute("""
+                conn.execute(
+                    """
                     UPDATE players
                     SET last_seen = ?, times_seen = times_seen + 1
                     WHERE name = ?
-                """, (now.isoformat(), name))
+                """,
+                    (now.isoformat(), name),
+                )
                 return Player(
                     id=row["id"],
                     name=name,
@@ -270,10 +292,13 @@ class Database:
                 )
             else:
                 # Insert new
-                cursor = conn.execute("""
+                cursor = conn.execute(
+                    """
                     INSERT INTO players (name, first_seen, last_seen, times_seen)
                     VALUES (?, ?, ?, 1)
-                """, (name, now.isoformat(), now.isoformat()))
+                """,
+                    (name, now.isoformat(), now.isoformat()),
+                )
                 return Player(
                     id=cursor.lastrowid,
                     name=name,
@@ -286,8 +311,7 @@ class Database:
         """Get recently seen players."""
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM players ORDER BY last_seen DESC LIMIT ?",
-                (limit,)
+                "SELECT * FROM players ORDER BY last_seen DESC LIMIT ?", (limit,)
             ).fetchall()
 
             return [
@@ -306,17 +330,18 @@ class Database:
     def set_runtime_config(self, key: str, value: Any) -> None:
         """Set a runtime config value."""
         with self._connect() as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT OR REPLACE INTO runtime_config (key, value, updated_at)
                 VALUES (?, ?, ?)
-            """, (key, json.dumps(value), datetime.now().isoformat()))
+            """,
+                (key, json.dumps(value), datetime.now().isoformat()),
+            )
 
     def get_runtime_config(self, key: str, default: Any = None) -> Any:
         """Get a runtime config value."""
         with self._connect() as conn:
-            row = conn.execute(
-                "SELECT value FROM runtime_config WHERE key = ?", (key,)
-            ).fetchone()
+            row = conn.execute("SELECT value FROM runtime_config WHERE key = ?", (key,)).fetchone()
 
             if row is None:
                 return default
@@ -339,20 +364,23 @@ class Database:
     def save_esi_token(self, token: ESIToken, encrypted_refresh: str) -> None:
         """Save or update an ESI token."""
         with self._connect() as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT OR REPLACE INTO esi_tokens
                 (character_id, character_name, access_token, refresh_token_encrypted,
                  token_type, expires_at, scopes)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                token.character_id,
-                token.character_name,
-                token.access_token,
-                encrypted_refresh,
-                "Bearer",
-                token.expires_at.isoformat(),
-                " ".join(token.scopes),
-            ))
+            """,
+                (
+                    token.character_id,
+                    token.character_name,
+                    token.access_token,
+                    encrypted_refresh,
+                    "Bearer",
+                    token.expires_at.isoformat(),
+                    " ".join(token.scopes),
+                ),
+            )
 
     def get_esi_token(self, character_id: int) -> dict | None:
         """Get a stored ESI token row (with encrypted refresh token)."""
@@ -399,18 +427,21 @@ class Database:
     def save_esi_character(self, character: ESICharacter) -> None:
         """Save or update an ESI character."""
         with self._connect() as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT OR REPLACE INTO esi_characters
                 (character_id, character_name, corporation_id, alliance_id, added_at, is_active)
                 VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                character.character_id,
-                character.character_name,
-                character.corporation_id,
-                character.alliance_id,
-                character.added_at.isoformat(),
-                int(character.is_active),
-            ))
+            """,
+                (
+                    character.character_id,
+                    character.character_name,
+                    character.corporation_id,
+                    character.alliance_id,
+                    character.added_at.isoformat(),
+                    int(character.is_active),
+                ),
+            )
 
     def get_esi_character(self, character_id: int) -> ESICharacter | None:
         """Get an ESI character by ID."""
@@ -450,9 +481,7 @@ class Database:
     def get_active_esi_character(self) -> ESICharacter | None:
         """Get the currently active ESI character."""
         with self._connect() as conn:
-            row = conn.execute(
-                "SELECT * FROM esi_characters WHERE is_active = 1"
-            ).fetchone()
+            row = conn.execute("SELECT * FROM esi_characters WHERE is_active = 1").fetchone()
 
             if row is None:
                 return None
@@ -471,8 +500,7 @@ class Database:
         with self._connect() as conn:
             conn.execute("UPDATE esi_characters SET is_active = 0")
             conn.execute(
-                "UPDATE esi_characters SET is_active = 1 WHERE character_id = ?",
-                (character_id,)
+                "UPDATE esi_characters SET is_active = 1 WHERE character_id = ?", (character_id,)
             )
 
     def delete_esi_character(self, character_id: int) -> None:
@@ -480,6 +508,77 @@ class Database:
         with self._connect() as conn:
             conn.execute("DELETE FROM esi_characters WHERE character_id = ?", (character_id,))
             conn.execute("DELETE FROM esi_tokens WHERE character_id = ?", (character_id,))
+
+    # Facility Methods
+
+    def save_facility(self, facility: dict) -> int:
+        """Save a new facility. Returns the new facility ID."""
+        now = datetime.now().isoformat()
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO facilities
+                (name, structure_type_id, system_name, rig1_type_id, rig2_type_id,
+                 rig3_type_id, facility_tax, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+                (
+                    facility["name"],
+                    facility["structure_type_id"],
+                    facility["system_name"],
+                    facility.get("rig1_type_id"),
+                    facility.get("rig2_type_id"),
+                    facility.get("rig3_type_id"),
+                    facility.get("facility_tax", 0.0),
+                    now,
+                    now,
+                ),
+            )
+            return cursor.lastrowid
+
+    def update_facility(self, facility_id: int, facility: dict) -> None:
+        """Update an existing facility."""
+        now = datetime.now().isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE facilities SET
+                    name = ?, structure_type_id = ?, system_name = ?,
+                    rig1_type_id = ?, rig2_type_id = ?, rig3_type_id = ?,
+                    facility_tax = ?, updated_at = ?
+                WHERE id = ?
+            """,
+                (
+                    facility["name"],
+                    facility["structure_type_id"],
+                    facility["system_name"],
+                    facility.get("rig1_type_id"),
+                    facility.get("rig2_type_id"),
+                    facility.get("rig3_type_id"),
+                    facility.get("facility_tax", 0.0),
+                    now,
+                    facility_id,
+                ),
+            )
+
+    def get_facility(self, facility_id: int) -> dict | None:
+        """Get a facility by ID."""
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM facilities WHERE id = ?", (facility_id,)).fetchone()
+            if row is None:
+                return None
+            return dict(row)
+
+    def get_all_facilities(self) -> list[dict]:
+        """Get all facilities."""
+        with self._connect() as conn:
+            rows = conn.execute("SELECT * FROM facilities ORDER BY name").fetchall()
+            return [dict(row) for row in rows]
+
+    def delete_facility(self, facility_id: int) -> None:
+        """Delete a facility."""
+        with self._connect() as conn:
+            conn.execute("DELETE FROM facilities WHERE id = ?", (facility_id,))
 
     # ESI Encryption Key
 
@@ -494,8 +593,7 @@ class Database:
             # Generate new key
             key = Fernet.generate_key()
             conn.execute(
-                "INSERT INTO esi_encryption (id, fernet_key) VALUES (1, ?)",
-                (key.decode(),)
+                "INSERT INTO esi_encryption (id, fernet_key) VALUES (1, ?)", (key.decode(),)
             )
             logger.info("Generated new ESI encryption key")
             return key

@@ -179,6 +179,11 @@ class ESIClient:
         """Get info for a solar system."""
         return await self._request("GET", f"/v4/universe/systems/{system_id}/")
 
+    async def get_character_skills(self) -> dict:
+        """Get the active character's trained skills."""
+        cid = self.token.character_id
+        return await self._request("GET", f"/v4/characters/{cid}/skills/")
+
     async def get_character_blueprints(self) -> list:
         """Get all blueprints in the active character's inventory (paginated)."""
         cid = self.token.character_id

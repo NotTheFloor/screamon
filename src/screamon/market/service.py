@@ -9,16 +9,21 @@ import httpx
 logger = logging.getLogger(__name__)
 
 ESI_BASE_URL = "https://esi.evetech.net"
-CACHE_TTL = 300  # 5 minutes, matches ESI cache
+CACHE_TTL = 300  # 5 minutes, matches ESI order cache
+GLOBAL_CACHE_TTL = 3600  # 1 hour, matches ESI adjusted prices / industry cache
 
 
 class MarketService:
-    """Fetches and caches best buy/sell prices from ESI public market data."""
+    """Fetches and caches market data from ESI public endpoints."""
 
     def __init__(self, region_id: int = 10000002, location_id: int | None = 60003760):
         self.region_id = region_id
         self.location_id = location_id
         self._cache: dict[int, dict] = {}  # type_id -> {sell, buy, cached_at}
+        self._adjusted_prices: dict[int, float] = {}  # type_id -> adjusted_price
+        self._adjusted_prices_cached_at: float = 0
+        self._industry_indices: dict[int, dict] = {}  # system_id -> {activity: cost_index}
+        self._industry_cached_at: float = 0
         self._client: httpx.AsyncClient | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
@@ -29,6 +34,8 @@ class MarketService:
     async def close(self) -> None:
         if self._client and not self._client.is_closed:
             await self._client.aclose()
+
+    # --- Market Order Prices (best buy/sell per station) ---
 
     def _is_cached(self, type_id: int) -> bool:
         entry = self._cache.get(type_id)
@@ -84,7 +91,6 @@ class MarketService:
 
     async def get_prices(self, type_ids: list[int]) -> dict[int, dict]:
         """Get prices for multiple type_ids concurrently, using cache."""
-        # Split into cached and uncached
         results: dict[int, dict] = {}
         to_fetch: list[int] = []
 
@@ -96,7 +102,6 @@ class MarketService:
                 to_fetch.append(tid)
 
         if to_fetch:
-            # Fetch uncached prices concurrently (batch of 20 to avoid overwhelming ESI)
             for i in range(0, len(to_fetch), 20):
                 batch = to_fetch[i:i + 20]
                 fetched = await asyncio.gather(
@@ -112,6 +117,88 @@ class MarketService:
 
         return results
 
+    # --- Adjusted Prices (for EIV calculation) ---
+
+    async def _fetch_adjusted_prices(self) -> None:
+        """Fetch all adjusted prices from /markets/prices/ (single call, 1h cache)."""
+        client = await self._get_client()
+        response = await client.get(
+            "/v1/markets/prices/", params={"datasource": "tranquility"}
+        )
+        response.raise_for_status()
+
+        self._adjusted_prices = {}
+        for entry in response.json():
+            ap = entry.get("adjusted_price")
+            if ap is not None:
+                self._adjusted_prices[entry["type_id"]] = ap
+
+        self._adjusted_prices_cached_at = time.time()
+        logger.info("Fetched adjusted prices for %d types", len(self._adjusted_prices))
+
+    async def ensure_adjusted_prices(self) -> None:
+        """Ensure adjusted prices are loaded and fresh."""
+        if (time.time() - self._adjusted_prices_cached_at) >= GLOBAL_CACHE_TTL:
+            await self._fetch_adjusted_prices()
+
+    async def get_adjusted_price(self, type_id: int) -> float | None:
+        """Get the adjusted price for a type_id."""
+        await self.ensure_adjusted_prices()
+        return self._adjusted_prices.get(type_id)
+
+    async def calculate_eiv(self, materials: list[dict]) -> float:
+        """Calculate Estimated Item Value from blueprint materials.
+
+        EIV = SUM(adjusted_price[type_id] * quantity) for each material.
+
+        Args:
+            materials: List of dicts with 'type_id' and 'quantity' keys
+        """
+        await self.ensure_adjusted_prices()
+        total = 0.0
+        for mat in materials:
+            ap = self._adjusted_prices.get(mat["type_id"], 0.0)
+            total += ap * mat["quantity"]
+        return total
+
+    # --- Industry System Cost Indices ---
+
+    async def _fetch_industry_indices(self) -> None:
+        """Fetch all system cost indices from /industry/systems/ (single call, 1h cache)."""
+        client = await self._get_client()
+        response = await client.get(
+            "/v1/industry/systems/", params={"datasource": "tranquility"}
+        )
+        response.raise_for_status()
+
+        self._industry_indices = {}
+        for system in response.json():
+            sid = system["solar_system_id"]
+            indices = {}
+            for ci in system.get("cost_indices", []):
+                indices[ci["activity"]] = ci["cost_index"]
+            self._industry_indices[sid] = indices
+
+        self._industry_cached_at = time.time()
+        logger.info("Fetched industry indices for %d systems", len(self._industry_indices))
+
+    async def ensure_industry_indices(self) -> None:
+        """Ensure industry indices are loaded and fresh."""
+        if (time.time() - self._industry_cached_at) >= GLOBAL_CACHE_TTL:
+            await self._fetch_industry_indices()
+
+    async def get_system_cost_index(
+        self, system_id: int, activity: str = "manufacturing"
+    ) -> float | None:
+        """Get the cost index for a specific activity in a solar system."""
+        await self.ensure_industry_indices()
+        indices = self._industry_indices.get(system_id)
+        if indices is None:
+            return None
+        return indices.get(activity)
+
+    # --- Cache Stats ---
+
     @property
     def cache_stats(self) -> dict:
         """Return cache statistics."""
@@ -121,4 +208,6 @@ class MarketService:
             "total_entries": len(self._cache),
             "valid_entries": valid,
             "ttl_seconds": CACHE_TTL,
+            "adjusted_prices_count": len(self._adjusted_prices),
+            "industry_systems_count": len(self._industry_indices),
         }

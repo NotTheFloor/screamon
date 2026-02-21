@@ -353,6 +353,80 @@ button:disabled {
     display: flex;
     align-items: center;
     gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.bp-filters {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+/* Sort Button Group */
+.bp-sort-group {
+    display: inline-flex;
+    gap: 0;
+    margin-left: 0.5rem;
+    border: 1px solid var(--accent-color);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.bp-sort-btn {
+    background: var(--primary-color);
+    color: var(--text-muted);
+    border: none;
+    border-right: 1px solid var(--accent-color);
+    padding: 0.25rem 0.6rem;
+    font-size: 0.75rem;
+    border-radius: 0;
+    cursor: pointer;
+}
+
+.bp-sort-btn:last-child {
+    border-right: none;
+}
+
+.bp-sort-btn:hover {
+    background: var(--surface-color);
+    color: var(--text-color);
+}
+
+.bp-sort-btn.active {
+    background: var(--accent-color);
+    color: white;
+    font-weight: 600;
+}
+
+/* Bulk Progress Bar */
+.bulk-progress-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.75rem;
+}
+
+.bulk-progress-track {
+    flex: 1;
+    height: 6px;
+    background-color: var(--primary-color);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.bulk-progress-fill {
+    height: 100%;
+    background-color: var(--accent-color);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.bulk-progress-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    white-space: nowrap;
 }
 
 .blueprints-table-wrap {
@@ -401,6 +475,12 @@ button:disabled {
     background-color: var(--primary-color);
     color: #f5a623;
     border: 1px solid #f5a623;
+}
+
+.bp-badge.reaction {
+    background-color: var(--primary-color);
+    color: #ce93d8;
+    border: 1px solid #ce93d8;
 }
 
 .bp-expand-icon {
@@ -460,6 +540,36 @@ button:disabled {
     font-style: italic;
 }
 
+.bp-cost-summary {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+    padding: 0.4rem 0;
+    margin-bottom: 0.4rem;
+    border-bottom: 1px solid var(--primary-color);
+    font-size: 0.8rem;
+}
+
+.bp-cost-item {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+}
+
+.bp-cost-label {
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.bp-cost-value {
+    color: var(--text-color);
+    font-weight: 600;
+}
+
+.bp-cost-highlight .bp-cost-value {
+    color: #f5a623;
+}
+
 .bp-materials-table {
     width: 100%;
     border-collapse: collapse;
@@ -493,6 +603,426 @@ button:disabled {
 .bp-line-total {
     color: #6ecbf5;
     font-weight: 600;
+}
+
+/* Facility Bar */
+.facility-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+    padding: 0.6rem 0.75rem;
+    background-color: var(--primary-color);
+    border-radius: 6px;
+    flex-wrap: wrap;
+}
+
+.facility-bar select {
+    background-color: var(--surface-color);
+    border: 1px solid var(--accent-color);
+    color: var(--text-color);
+    padding: 0.4rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    min-width: 180px;
+}
+
+.facility-info {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.facility-info-item {
+    font-size: 0.8rem;
+    padding: 0.2rem 0.5rem;
+    background-color: var(--surface-color);
+    border-radius: 3px;
+    color: var(--text-muted);
+}
+
+/* Reaction badge */
+.bp-reaction-badge {
+    background-color: #7b1fa2;
+    color: white;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.75rem;
+}
+
+/* Invention badge */
+.bp-badge.invention {
+    background-color: var(--primary-color);
+    color: #81c784;
+    border: 1px solid #81c784;
+    font-size: 0.7rem;
+    padding: 0.05rem 0.35rem;
+    margin-left: 0.3rem;
+}
+
+/* Activity tabs (Manufacturing / Invention toggle) */
+.bp-activity-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 0.5rem;
+    border-bottom: 1px solid var(--primary-color);
+}
+
+.bp-tab {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+}
+
+.bp-tab:hover {
+    color: var(--text-color);
+    background: none;
+}
+
+.bp-tab.active {
+    color: var(--accent-color);
+    border-bottom-color: var(--accent-color);
+    background: none;
+}
+
+/* Invention badge in cost summary */
+.bp-invention-badge {
+    background-color: #2e7d32;
+    color: white;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.75rem;
+}
+
+/* Invention product selector */
+.bp-invention-product-selector {
+    margin-bottom: 0.5rem;
+}
+
+.bp-invention-product-selector label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.bp-invention-product-selector select {
+    background-color: var(--surface-color);
+    border: 1px solid var(--accent-color);
+    color: var(--text-color);
+    padding: 0.3rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+}
+
+/* Decryptor selector */
+.bp-decryptor-selector {
+    margin: 0.5rem 0;
+}
+
+.bp-decryptor-selector label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.bp-decryptor-selector select {
+    background-color: var(--surface-color);
+    border: 1px solid var(--accent-color);
+    color: var(--text-color);
+    padding: 0.3rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    min-width: 300px;
+}
+
+/* Expected cost per success highlight */
+.bp-invention-expected .bp-cost-value {
+    color: #81c784;
+    font-weight: 700;
+}
+
+/* Invention skills */
+.bp-invention-skills {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+}
+
+.bp-skill-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.1rem 0.4rem;
+    background-color: var(--primary-color);
+    border: 1px solid var(--text-muted);
+    border-radius: 3px;
+    font-size: 0.75rem;
+    color: var(--text-color);
+}
+
+.bp-skill-tag.met {
+    border-color: var(--success-color);
+    background-color: rgba(76, 175, 80, 0.15);
+}
+
+.bp-skill-tag.unmet {
+    border-color: var(--error-color);
+    background-color: rgba(244, 67, 54, 0.15);
+}
+
+.bp-skill-tag .skill-level {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+}
+
+/* Invention time */
+.bp-invention-time {
+    margin-top: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.bp-invention-time span:last-child {
+    color: var(--text-color);
+}
+
+/* Material base quantity (shown when facility adjusts it) */
+.bp-mat-base-qty {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-left: 0.3rem;
+}
+
+/* Settings Bar */
+.settings-bar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background-color: var(--primary-color);
+    border-radius: 6px;
+    flex-wrap: wrap;
+}
+
+.settings-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.settings-input-group {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.settings-input-group input {
+    background-color: var(--surface-color);
+    border: 1px solid var(--accent-color);
+    color: var(--text-color);
+    padding: 0.3rem 0.4rem;
+    border-radius: 4px;
+    width: 65px;
+    font-size: 0.8rem;
+}
+
+/* Profit Section */
+.bp-profit-section {
+    margin-top: 0.75rem;
+    padding-top: 0.6rem;
+    border-top: 2px solid var(--accent-color);
+}
+
+.bp-profit-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8rem;
+    color: var(--accent-color);
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.bp-profit-product-info {
+    font-weight: 400;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.bp-profit-price {
+    color: #6ecbf5;
+    font-weight: 600;
+}
+
+/* Profit Grid Table */
+.bp-profit-table {
+    width: 100%;
+    max-width: 500px;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin-bottom: 0.5rem;
+}
+
+.bp-profit-table th {
+    text-align: center;
+    padding: 0.3rem 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 0.75rem;
+    border-bottom: 1px solid var(--primary-color);
+}
+
+.bp-profit-table td {
+    padding: 0.35rem 0.75rem;
+    text-align: center;
+}
+
+.bp-profit-row-label {
+    text-align: left !important;
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 0.8rem;
+    width: 100px;
+}
+
+.profit-positive {
+    color: var(--success-color);
+    font-weight: 600;
+}
+
+.profit-negative {
+    color: var(--error-color);
+    font-weight: 600;
+}
+
+.bp-profit-margin {
+    font-size: 0.75rem;
+    opacity: 0.8;
+    margin-left: 0.2rem;
+}
+
+.bp-profit-na {
+    color: var(--text-muted);
+}
+
+/* Profit Breakdown */
+.bp-profit-breakdown {
+    margin-top: 0.4rem;
+    padding: 0.4rem 0;
+    font-size: 0.8rem;
+}
+
+.bp-profit-breakdown-title {
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 0.75rem;
+}
+
+.bp-profit-breakdown-items {
+    display: flex;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    margin-top: 0.3rem;
+}
+
+.bp-breakdown-item {
+    display: flex;
+    gap: 0.3rem;
+    align-items: center;
+}
+
+.bp-breakdown-label {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.bp-breakdown-value {
+    color: var(--text-color);
+    font-weight: 600;
+    font-size: 0.8rem;
+}
+
+/* Modal */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+}
+
+.modal {
+    background-color: var(--surface-color);
+    border: 1px solid var(--accent-color);
+    border-radius: 8px;
+    padding: 1.5rem;
+    width: 90%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal h3 {
+    color: var(--accent-color);
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+}
+
+.facility-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.facility-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.facility-form input,
+.facility-form select {
+    background-color: var(--primary-color);
+    border: 1px solid var(--accent-color);
+    color: var(--text-color);
+    padding: 0.5rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.facility-form select {
+    max-width: 100%;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    align-items: center;
 }
 
 /* Loading State */

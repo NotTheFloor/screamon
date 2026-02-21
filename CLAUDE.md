@@ -93,6 +93,71 @@ EVE SSO OAuth2 PKCE integration for direct API access to character data:
 
 **Setup**: Register app at developers.eveonline.com, set callback to `http://localhost:8080/esi/callback`, add `client_id` to `config.json` under `esi.client_id`.
 
+### Industry Analyzer (`sde/`, `market/`, facility system)
+
+The web dashboard includes a blueprint/industry analyzer with manufacturing cost calculations.
+
+**Facility System** (`database.py` facilities table, `web/esi_routes.py` FacilityController):
+Saved configurations of structure + rigs + tax. Structures: Raitaru (35825, M rigs), Azbel (35826, L rigs), Sotiyo (35827, XL rigs).
+
+**SDE Loader** (`sde/loader.py`):
+Loads blueprints, types, groups, typeDogma, mapSolarSystems. Extracts structure bonuses (dogma attrs 2600/2601/2602), engineering rig bonuses (attrs 2594/2595), system security, and blueprint product → rig category classification. Handles both `manufacturing` and `reaction` activities.
+
+**Manufacturing Formulas**:
+- Material quantity: `max(runs, ceil(base_qty * (1 - ME/100) * structure_mat_bonus * rig_mat_bonus))`
+  - `structure_mat_bonus`: dogma attr 2600 (e.g. 0.99 for Raitaru = 1% reduction)
+  - `rig_mat_bonus`: `1 + (dogma_attr_2594 / 100) * security_multiplier` (e.g. -2.0% × 1.9 lowsec = 0.962)
+  - Security multiplier: highsec(≥0.45)=1.0×, lowsec(0.05-0.44)=1.9×, null(<0.05)=2.1×
+  - Reactions always use ME=0
+- Job cost: `EIV * (SCI * (1 - structure_cost_bonus) + SCC_surcharge + facility_tax)`
+  - EIV = sum of adjusted_price × base_quantity for all materials
+  - SCC surcharge = 4% (fixed)
+  - Reactions use activity="reaction" for system cost index lookup
+
+**Systems**: Manufacturing uses Serren, reactions use Obalyu (hardcoded in app.js for now).
+
+### EVE Industry Skill Mechanics (Reference for Future Implementation)
+
+Skills do NOT affect material quantities or ISK job cost. They affect **time only** and act as **eligibility gates**.
+
+**Time Reduction Skills** (stack multiplicatively):
+
+| Skill (typeID) | Dogma Attr | Bonus/Level | Applies To |
+|---|---|---|---|
+| Industry (3380) | 440 `manufacturingTimeBonus` | -4% | All manufacturing |
+| Advanced Industry (3388) | 1961 `advancedIndustrySkillIndustryJobTimeBonus` | -3% | All manufacturing + research |
+| Reactions (45746) | 2660 `reactionTimeBonus` | -4% | All reactions |
+| Adv Small Ship Construction (3395) | 1982 `manufactureTimePerLevel` | -1% | Items requiring this skill |
+| Adv Medium Ship Construction (3397) | 1982 | -1% | Items requiring this skill |
+| Adv Large Ship Construction (3398) | 1982 | -1% | Items requiring this skill |
+| Adv Industrial Ship Construction (3396) | 1982 | -1% | Items requiring this skill |
+| Capital Ship Construction (22242) | — | No time bonus | Pure prerequisite gate |
+| Science/Engineering skills (16 total, group 270) | 1982 | -1% | Items requiring that skill |
+
+**Full time formula**: `base_time * runs * (1 - 0.02*TE) * (1 - 0.04*industry_lvl) * (1 - 0.03*adv_industry_lvl) * (1 - 0.01*science_skill_lvl) * (1 - implant_bonus) * (1 - structure_time_bonus) * (1 - rig_time_bonus*sec_mult)`
+
+At max skills (Industry V + Advanced Industry V) without other bonuses: `0.80 * 0.85 = 0.68` (32% reduction).
+
+**Implants** (slot 8, one active): BX-801 (1%), BX-802 (2%), BX-804 (4%).
+
+**Eligibility Patterns** (from SDE `blueprints.jsonl` → `activities.manufacturing.skills`):
+- T1 items: Industry I-V only (1,669 blueprints need just Industry I)
+- T2 items: Industry V + 2 science skills at level 1
+- T2 ships: Above + Advanced Ship Construction specialization
+- T2 rigs: Above + Jury Rigging (26252)
+- Capital items: Capital Ship Construction (22242), requires Industry V + Advanced Industry V
+- Reactions: Reactions skill (45746) at levels 1-5
+
+**ESI Access**: Character skills via `GET /characters/{id}/skills/` (scope `esi-skills.read_skills.v1`) returns `skill_id`, `trained_skill_level`, `active_skill_level`.
+
+**Implementation Notes for Job Time Feature**:
+1. Fetch character skills via ESI and cache them
+2. For each blueprint, read required skills from `blueprints.jsonl` → `activities.*.skills`
+3. Look up time bonus dogma attrs (440, 1961, 1982, 2660) for each required skill
+4. Apply multiplicatively along with blueprint TE, structure time bonus (dogma 2602), and rig time bonus
+5. Structure time bonus attr 2602 is a multiplier (e.g. 0.85 for Raitaru = 15% reduction)
+6. 83 unique skills are referenced across all manufacturing/reaction blueprints
+
 ## Code Conventions
 
 - Python 3.11+, type hints throughout
