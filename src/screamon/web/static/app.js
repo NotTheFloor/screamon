@@ -48,6 +48,7 @@ function dashboard() {
         // Settings state
         salesTaxRate: 0.036,
         brokerFeeRate: 0.03,
+        productExcludeWords: '',
         settingsLoaded: false,
 
         // Profit state
@@ -151,6 +152,12 @@ function dashboard() {
         },
 
         get filteredBlueprints() {
+            // Product name exclude filter
+            const excludeWords = this.productExcludeWords
+                .split('\n')
+                .map(s => s.trim().toLowerCase())
+                .filter(s => s.length > 0);
+
             // Type filter
             let list = this.blueprints.filter(bp => {
                 const kind = this.bpKind(bp);
@@ -158,6 +165,12 @@ function dashboard() {
                 if (kind === 'bpc' && !this.showBPC) return false;
                 if (kind === 'reaction' && !this.showReactions) return false;
                 if (this.showInvention && !bp.has_invention) return false;
+                if (excludeWords.length > 0 && bp.products) {
+                    for (const prod of bp.products) {
+                        const name = (prod.type_name || '').toLowerCase();
+                        if (excludeWords.some(w => name.includes(w))) return false;
+                    }
+                }
                 return true;
             });
 
@@ -232,6 +245,7 @@ function dashboard() {
                 const data = await this.fetchAPI('/settings/');
                 this.salesTaxRate = data.sales_tax_rate;
                 this.brokerFeeRate = data.broker_fee_rate;
+                this.productExcludeWords = (data.product_exclude_words || []).join('\n');
                 this.settingsLoaded = true;
             } catch (e) {
                 console.error('Failed to load settings', e);
@@ -240,11 +254,16 @@ function dashboard() {
 
         async saveSettings() {
             try {
+                const excludeWords = this.productExcludeWords
+                    .split('\n')
+                    .map(s => s.trim())
+                    .filter(s => s.length > 0);
                 await this.fetchAPI('/settings/', {
                     method: 'PUT',
                     body: JSON.stringify({
                         sales_tax_rate: this.salesTaxRate,
                         broker_fee_rate: this.brokerFeeRate,
+                        product_exclude_words: excludeWords,
                     }),
                 });
             } catch (e) {
@@ -864,9 +883,11 @@ function dashboard() {
 
         formatISK(value) {
             if (value == null) return '\u2014';
-            if (value >= 1e9) return (value / 1e9).toFixed(2) + 'B';
-            if (value >= 1e6) return (value / 1e6).toFixed(2) + 'M';
-            if (value >= 1e3) return (value / 1e3).toFixed(1) + 'K';
+            const abs = Math.abs(value);
+            const sign = value < 0 ? '-' : '';
+            if (abs >= 1e9) return sign + (abs / 1e9).toFixed(2) + 'B';
+            if (abs >= 1e6) return sign + (abs / 1e6).toFixed(2) + 'M';
+            if (abs >= 1e3) return sign + (abs / 1e3).toFixed(1) + 'K';
             return value.toFixed(2);
         },
 

@@ -598,6 +598,7 @@ def create_esi_routes(
             return {
                 "sales_tax_rate": db.get_runtime_config("sales_tax_rate", 0.036),
                 "broker_fee_rate": db.get_runtime_config("broker_fee_rate", 0.03),
+                "product_exclude_words": db.get_runtime_config("product_exclude_words", []),
             }
 
         @put("/")
@@ -607,6 +608,8 @@ def create_esi_routes(
                 db.set_runtime_config("sales_tax_rate", float(data["sales_tax_rate"]))
             if "broker_fee_rate" in data:
                 db.set_runtime_config("broker_fee_rate", float(data["broker_fee_rate"]))
+            if "product_exclude_words" in data:
+                db.set_runtime_config("product_exclude_words", list(data["product_exclude_words"]))
             return {"status": "ok"}
 
     return [

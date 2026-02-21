@@ -177,6 +177,13 @@
                            :value="(brokerFeeRate * 100).toFixed(1)"
                            @change="brokerFeeRate = parseFloat($event.target.value) / 100; saveSettings()">
                 </label>
+                <label class="settings-input-group">
+                    Exclude Products
+                    <textarea class="settings-exclude-textarea" rows="2"
+                              x-model="productExcludeWords"
+                              @change="saveSettings()"
+                              placeholder="Expired&#10;Other word"></textarea>
+                </label>
             </div>
 
             <!-- Bulk Price Loading Progress -->
