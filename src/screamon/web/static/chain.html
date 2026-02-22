@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Chain Calculator - Screamon</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="stylesheet" href="/static/style.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"></script>
+    <script src="/static/chain.js"></script>
+</head>
+<body>
+    <header>
+        <h1>Screamon</h1>
+        <p class="subtitle">Job Chain Calculator</p>
+    </header>
+
+    <main x-data="chainCalculator()" x-init="init()">
+        <!-- Header -->
+        <section class="chain-header">
+            <div class="chain-header-top">
+                <a href="/static/index.html" class="chain-back-link">&larr; Dashboard</a>
+                <span class="chain-product-name" x-text="productName"></span>
+                <template x-if="currentChainId && chainName">
+                    <span class="chain-name-display" x-text="chainName"></span>
+                </template>
+                <span class="bp-badge" :class="activityType === 'reaction' ? 'reaction' : 'bpo'"
+                      x-text="activityType === 'reaction' ? 'Reaction' : 'Manufacturing'"></span>
+            </div>
+            <div class="chain-header-info">
+                <span class="chain-info-chip">ME: <span x-text="rootME"></span>%</span>
+                <span class="chain-info-chip">TE: <span x-text="rootTE"></span>%</span>
+                <label class="chain-runs-label">
+                    Runs:
+                    <input type="number" min="1" class="chain-runs-input"
+                           x-model.number="runs" @change="onRunsChange()">
+                </label>
+            </div>
+        </section>
+
+        <!-- Facility Bar -->
+        <section class="chain-facility-bar">
+            <div class="chain-facility-selector">
+                <label>
+                    <span class="chain-facility-label">Manufacturing Facility</span>
+                    <select @change="selectMfgFacility($event.target.value)">
+                        <option value="">None / NPC Station</option>
+                        <template x-for="f in facilities" :key="f.id">
+                            <option :value="f.id" :selected="mfgFacilityId === f.id" x-text="f.name"></option>
+                        </template>
+                    </select>
+                </label>
+                <template x-if="mfgFacility">
+                    <div class="facility-info">
+                        <span class="facility-info-item" x-text="structureName(mfgFacility)"></span>
+                        <span class="facility-info-item" x-text="mfgFacility.system_name"></span>
+                        <template x-if="mfgSecurity">
+                            <span class="facility-info-item" x-text="secLabel(mfgSecurity) + ' ' + mfgSecurity.rig_multiplier + 'x'"></span>
+                        </template>
+                    </div>
+                </template>
+            </div>
+            <div class="chain-facility-selector">
+                <label>
+                    <span class="chain-facility-label">Reaction Facility</span>
+                    <select @change="selectRxnFacility($event.target.value)">
+                        <option value="">None / NPC Station</option>
+                        <template x-for="f in facilities" :key="f.id">
+                            <option :value="f.id" :selected="rxnFacilityId === f.id" x-text="f.name"></option>
+                        </template>
+                    </select>
+                </label>
+                <template x-if="rxnFacility">
+                    <div class="facility-info">
+                        <span class="facility-info-item" x-text="structureName(rxnFacility)"></span>
+                        <span class="facility-info-item" x-text="rxnFacility.system_name"></span>
+                        <template x-if="rxnSecurity">
+                            <span class="facility-info-item" x-text="secLabel(rxnSecurity) + ' ' + rxnSecurity.rig_multiplier + 'x'"></span>
+                        </template>
+                    </div>
+                </template>
+            </div>
+            <div class="chain-settings">
+                <label class="toggle">
+                    <input type="checkbox" x-model="proratePartialRuns">
+                    <span class="slider"></span>
+                    Prorate partial runs
+                </label>
+                <label class="settings-input-group">
+                    Sales Tax %
+                    <input type="number" min="0" max="20" step="0.1"
+                           :value="(salesTaxRate * 100).toFixed(1)"
+                           @change="salesTaxRate = parseFloat($event.target.value) / 100">
+                </label>
+                <label class="settings-input-group">
+                    Broker Fee %
+                    <input type="number" min="0" max="20" step="0.1"
+                           :value="(brokerFeeRate * 100).toFixed(1)"
+                           @change="brokerFeeRate = parseFloat($event.target.value) / 100">
+                </label>
+            </div>
+        </section>
+
+        <!-- Saved Chains Bar -->
+        <section class="chain-save-bar" x-show="!loading && rootNode" x-cloak>
+            <div class="chain-save-controls">
+                <select class="chain-save-select"
+                        @change="if ($event.target.value) { loadChain(parseInt($event.target.value)); $event.target.value = ''; }">
+                    <option value="">Load saved chain...</option>
+                    <template x-for="sc in savedChains" :key="sc.id">
+                        <option :value="sc.id" x-text="sc.name"></option>
+                    </template>
+                </select>
+                <button class="secondary" @click="chainName = chainName || productName; showSaveDialog = true">Save</button>
+                <template x-if="currentChainId">
+                    <button class="secondary" @click="saveChainAs()">Save As</button>
+                </template>
+                <template x-if="currentChainId">
+                    <button class="secondary" @click="deleteChain(currentChainId)">Delete</button>
+                </template>
+            </div>
+        </section>
+
+        <!-- Save Dialog -->
+        <template x-if="showSaveDialog">
+            <div class="modal-overlay" @click.self="showSaveDialog = false">
+                <div class="modal">
+                    <h3 x-text="currentChainId ? 'Update Chain' : 'Save Chain'"></h3>
+                    <div class="facility-form">
+                        <label>
+                            Name
+                            <input type="text" x-model="chainName" placeholder="Chain name..."
+                                   @keydown.enter="saveChain()">
+                        </label>
+                    </div>
+                    <div class="modal-actions">
+                        <button @click="saveChain()" :disabled="!chainName.trim()">Save</button>
+                        <button class="secondary" @click="showSaveDialog = false">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <!-- Loading -->
+        <div class="loading" x-show="loading">Loading chain data...</div>
+
+        <!-- Chain Tree -->
+        <section x-show="!loading && rootNode" x-cloak>
+            <h2>Material Chain</h2>
+
+            <!-- Root product info -->
+            <div class="chain-root-info">
+                <template x-if="rootNode && rootNode.products && rootNode.products.length > 0">
+                    <span>
+                        Produces: <strong x-text="rootNode.products[0].type_name"></strong>
+                        <button class="copy-btn" title="Copy name"
+                                @click="navigator.clipboard.writeText(rootNode.products[0].type_name)">&#x2398;</button>
+                        <span x-show="rootProductQty > 1" x-text="' x' + formatQuantity(rootProductQty)"></span>
+                        <span x-text="' (' + formatQuantity(runs) + ' run' + (runs !== 1 ? 's' : '') + ')'"></span>
+                    </span>
+                </template>
+            </div>
+
+            <div class="chain-tree">
+                <template x-for="item in flattenedTree" :key="item.node.id">
+                    <div class="chain-node" :style="'padding-left: ' + (item.depth * 24 + 8) + 'px'">
+                        <div class="chain-node-row">
+                            <span class="chain-node-qty" x-text="formatQuantity(item.node.required_qty)"></span>
+                            <span class="chain-node-name" x-text="item.node.type_name"></span>
+                            <template x-if="countLinkedSiblings(item.node) > 0">
+                                <button class="chain-link-toggle"
+                                        :class="{ linked: item.node.linked, unlinked: !item.node.linked }"
+                                        @click="toggleLink(item.node)"
+                                        :title="item.node.linked
+                                            ? 'Synced with ' + countLinkedSiblings(item.node) + ' matching node(s). Click to unlink.'
+                                            : 'Unlinked. Click to re-sync.'">
+                                    <span x-text="item.node.linked ? '\u2194' : '\u00D7'"></span>
+                                    <span x-text="countLinkedSiblings(item.node)"></span>
+                                </button>
+                            </template>
+                            <div class="chain-source-group">
+                                <button class="chain-source-btn" :class="{ active: item.node.source === 'buy' }"
+                                        @click="setSource(item.node, 'buy')">Buy</button>
+                                <button class="chain-source-btn" :class="{ active: item.node.source === 'order' }"
+                                        @click="setSource(item.node, 'order')">Order</button>
+                                <button class="chain-source-btn" :class="{ active: item.node.source === 'manufacture' }"
+                                        :disabled="item.node.can_manufacture === false"
+                                        @click="setSource(item.node, 'manufacture')">Mfg</button>
+                                <button class="chain-source-btn" :class="{ active: item.node.source === 'produce' }"
+                                        @click="setSource(item.node, 'produce')">Produce</button>
+                            </div>
+                            <span class="chain-node-cost" x-text="formatISK(nodeCost(item.node))"></span>
+                        </div>
+                        <!-- Manufacture details row -->
+                        <template x-if="item.node.source === 'manufacture' && item.node.blueprint_type_id">
+                            <div class="chain-mfg-details">
+                                <label class="chain-me-label">
+                                    ME:
+                                    <input type="number" min="0" max="10" class="chain-me-input"
+                                           x-model.number="item.node.me"
+                                           @change="onMEChange(item.node)">
+                                </label>
+                                <span class="chain-mfg-info"
+                                      x-text="formatQuantity(item.node.runs) + ' run' + (item.node.runs !== 1 ? 's' : '')
+                                              + ' = ' + formatQuantity(item.node.runs * item.node.base_product_qty) + ' units'"></span>
+                                <template x-if="proratePartialRuns && nodeProrateFactor(item.node) < 1">
+                                    <span class="chain-prorate-tag"
+                                          x-text="formatQuantity(item.node.required_qty) + ' / ' + formatQuantity(item.node.runs * item.node.base_product_qty) + ' costed (' + (nodeProrateFactor(item.node) * 100).toFixed(1) + '%)'"></span>
+                                </template>
+                                <span class="chain-mfg-info" x-text="item.node.activity_type === 'reaction' ? 'Reaction' : ''"></span>
+                                <template x-if="nodeJobCost(item.node) != null">
+                                    <span class="chain-mfg-job-cost">Job: <span x-text="formatISK(nodeJobCost(item.node))"></span></span>
+                                </template>
+                            </div>
+                        </template>
+                        <!-- Produce details row -->
+                        <template x-if="item.node.source === 'produce'">
+                            <div class="chain-produce-details">
+                                <span class="chain-produce-info">Opportunity cost (sell price - tax)</span>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+            </div>
+        </section>
+
+        <!-- Summary -->
+        <section class="chain-summary" x-show="!loading && rootNode" x-cloak>
+            <h2>Chain Summary</h2>
+            <div class="chain-summary-grid">
+                <div class="chain-summary-item">
+                    <span class="chain-summary-label">Total Material Cost</span>
+                    <span class="chain-summary-value" x-text="formatISK(totalMaterialCost()) + ' ISK'"></span>
+                </div>
+                <div class="chain-summary-item">
+                    <span class="chain-summary-label">Total Job Costs</span>
+                    <span class="chain-summary-value" x-text="formatISK(totalJobCosts()) + ' ISK'"></span>
+                </div>
+                <div class="chain-summary-item chain-summary-highlight">
+                    <span class="chain-summary-label">Total Chain Cost</span>
+                    <span class="chain-summary-value" x-text="formatISK(totalChainCost()) + ' ISK'"></span>
+                </div>
+            </div>
+
+            <!-- Revenue & Profit -->
+            <template x-if="rootNode && rootNode.products && rootNode.products.length > 0">
+                <div>
+                    <h3 class="chain-profit-title">Profit Analysis</h3>
+                    <div class="chain-revenue-info">
+                        <span>Product: <strong x-text="rootNode.products[0].type_name"></strong></span>
+                        <span>Sell Price: <span class="bp-profit-price" x-text="formatISK(productSellPrice())"></span></span>
+                        <span>Buy Price: <span class="bp-profit-price" x-text="formatISK(productBuyPrice())"></span></span>
+                    </div>
+
+                    <table class="bp-profit-table">
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>Instant Sell</th>
+                                <th>Sell Order</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="bp-profit-row-label">Chain Cost</td>
+                                <td>
+                                    <template x-if="chainProfit('sell') != null">
+                                        <span :class="chainProfit('sell').profit >= 0 ? 'profit-positive' : 'profit-negative'">
+                                            <span x-text="formatISK(chainProfit('sell').profit) + ' ISK'"></span>
+                                            <span class="bp-profit-margin" x-text="'(' + (chainProfit('sell').margin * 100).toFixed(1) + '%)'"></span>
+                                        </span>
+                                    </template>
+                                    <template x-if="chainProfit('sell') == null">
+                                        <span class="bp-profit-na">&mdash;</span>
+                                    </template>
+                                </td>
+                                <td>
+                                    <template x-if="chainProfit('order') != null">
+                                        <span :class="chainProfit('order').profit >= 0 ? 'profit-positive' : 'profit-negative'">
+                                            <span x-text="formatISK(chainProfit('order').profit) + ' ISK'"></span>
+                                            <span class="bp-profit-margin" x-text="'(' + (chainProfit('order').margin * 100).toFixed(1) + '%)'"></span>
+                                        </span>
+                                    </template>
+                                    <template x-if="chainProfit('order') == null">
+                                        <span class="bp-profit-na">&mdash;</span>
+                                    </template>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <!-- Breakdown -->
+                    <template x-if="chainProfit('order') != null">
+                        <div class="bp-profit-breakdown">
+                            <span class="bp-profit-breakdown-title">Breakdown (Sell Order):</span>
+                            <div class="bp-profit-breakdown-items">
+                                <span class="bp-breakdown-item">
+                                    <span class="bp-breakdown-label">Materials</span>
+                                    <span class="bp-breakdown-value" x-text="formatISK(totalMaterialCost()) + ' ISK'"></span>
+                                </span>
+                                <span class="bp-breakdown-item">
+                                    <span class="bp-breakdown-label">Job Costs</span>
+                                    <span class="bp-breakdown-value" x-text="formatISK(totalJobCosts()) + ' ISK'"></span>
+                                </span>
+                                <span class="bp-breakdown-item">
+                                    <span class="bp-breakdown-label">Sales Tax</span>
+                                    <span class="bp-breakdown-value" x-text="formatISK(chainProfit('order').salesTax) + ' ISK'"></span>
+                                </span>
+                                <span class="bp-breakdown-item">
+                                    <span class="bp-breakdown-label">Broker Fee</span>
+                                    <span class="bp-breakdown-value" x-text="formatISK(chainProfit('order').brokerFee) + ' ISK'"></span>
+                                </span>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </template>
+        </section>
+    </main>
+
+    <footer>
+        <p>Screamon v0.2.0 | <a href="https://github.com/your-repo/screamon">GitHub</a></p>
+    </footer>
+</body>
+</html>
