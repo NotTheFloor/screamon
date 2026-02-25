@@ -141,6 +141,23 @@ class Database:
                     updated_at TEXT NOT NULL
                 );
 
+                -- Saved chain configurations
+                CREATE TABLE IF NOT EXISTS saved_chains (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    type_id INTEGER NOT NULL,
+                    root_me INTEGER NOT NULL DEFAULT 0,
+                    root_te INTEGER NOT NULL DEFAULT 0,
+                    runs INTEGER NOT NULL DEFAULT 1,
+                    activity_type TEXT NOT NULL DEFAULT 'manufacturing',
+                    node_tree TEXT NOT NULL DEFAULT '[]',
+                    mfg_facility_id INTEGER,
+                    rxn_facility_id INTEGER,
+                    prorate_partial_runs INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
                 -- Create indexes for common queries
                 CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp DESC);
                 CREATE INDEX IF NOT EXISTS idx_events_detector ON events(detector);
@@ -579,6 +596,93 @@ class Database:
         """Delete a facility."""
         with self._connect() as conn:
             conn.execute("DELETE FROM facilities WHERE id = ?", (facility_id,))
+
+    # Saved Chain Methods
+
+    def save_chain(self, chain: dict) -> int:
+        """Save a new chain configuration. Returns the new chain ID."""
+        now = datetime.now().isoformat()
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO saved_chains
+                (name, type_id, root_me, root_te, runs, activity_type,
+                 node_tree, mfg_facility_id, rxn_facility_id,
+                 prorate_partial_runs, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+                (
+                    chain["name"],
+                    chain["type_id"],
+                    chain.get("root_me", 0),
+                    chain.get("root_te", 0),
+                    chain.get("runs", 1),
+                    chain.get("activity_type", "manufacturing"),
+                    json.dumps(chain.get("node_tree", [])),
+                    chain.get("mfg_facility_id"),
+                    chain.get("rxn_facility_id"),
+                    int(chain.get("prorate_partial_runs", True)),
+                    now,
+                    now,
+                ),
+            )
+            return cursor.lastrowid
+
+    def update_chain(self, chain_id: int, chain: dict) -> None:
+        """Update an existing chain configuration."""
+        now = datetime.now().isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE saved_chains SET
+                    name = ?, type_id = ?, root_me = ?, root_te = ?,
+                    runs = ?, activity_type = ?, node_tree = ?,
+                    mfg_facility_id = ?, rxn_facility_id = ?,
+                    prorate_partial_runs = ?, updated_at = ?
+                WHERE id = ?
+            """,
+                (
+                    chain["name"],
+                    chain["type_id"],
+                    chain.get("root_me", 0),
+                    chain.get("root_te", 0),
+                    chain.get("runs", 1),
+                    chain.get("activity_type", "manufacturing"),
+                    json.dumps(chain.get("node_tree", [])),
+                    chain.get("mfg_facility_id"),
+                    chain.get("rxn_facility_id"),
+                    int(chain.get("prorate_partial_runs", True)),
+                    now,
+                    chain_id,
+                ),
+            )
+
+    def get_chain(self, chain_id: int) -> dict | None:
+        """Get a saved chain by ID."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM saved_chains WHERE id = ?", (chain_id,)
+            ).fetchone()
+            if row is None:
+                return None
+            result = dict(row)
+            result["node_tree"] = json.loads(result["node_tree"])
+            result["prorate_partial_runs"] = bool(result["prorate_partial_runs"])
+            return result
+
+    def get_all_chains(self) -> list[dict]:
+        """Get all saved chains (summary only)."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, name, type_id, activity_type, updated_at "
+                "FROM saved_chains ORDER BY updated_at DESC"
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def delete_chain(self, chain_id: int) -> None:
+        """Delete a saved chain."""
+        with self._connect() as conn:
+            conn.execute("DELETE FROM saved_chains WHERE id = ?", (chain_id,))
 
     # ESI Encryption Key
 

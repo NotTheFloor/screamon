@@ -102,6 +102,8 @@
                 <button @click="loadBlueprints()" :disabled="loading.blueprints"
                         x-text="loading.blueprints ? 'Loading...' : 'Load Blueprints'"></button>
                 <div class="bp-filters" x-show="blueprints.length > 0">
+                    <input type="text" class="bp-search-input" placeholder="Search blueprints..."
+                           x-model="bpSearchQuery">
                     <label class="toggle">
                         <input type="checkbox" x-model="showBPO">
                         <span class="slider"></span>
@@ -205,6 +207,7 @@
                             <th>ME</th>
                             <th>TE</th>
                             <th>Runs</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <template x-for="bp in filteredBlueprints" :key="bp._distinctKey || bp.item_id || bp.type_id">
@@ -223,11 +226,16 @@
                                 <td x-text="bp.material_efficiency + '%'"></td>
                                 <td x-text="bp.time_efficiency + '%'"></td>
                                 <td x-text="bpRuns(bp)"></td>
+                                <td x-show="bp.materials">
+                                    <a class="chain-link"
+                                       :href="'/static/chain.html?type_id=' + bp.type_id + '&me=' + (bp.material_efficiency||0) + '&te=' + (bp.time_efficiency||0) + '&activity_type=' + (bp.activity_type||'manufacturing')"
+                                       @click.stop target="_blank">Chain</a>
+                                </td>
                             </tr>
                             <template x-if="isBpExpanded(bp) && bp.materials">
                                 <tr class="bp-materials-row">
                                     <td></td>
-                                    <td :colspan="showDistinct ? 6 : 5">
+                                    <td :colspan="showDistinct ? 7 : 6">
                                         <div class="bp-materials">
                                             <!-- Activity Tabs (only for inventable BPs) -->
                                             <div class="bp-activity-tabs" x-show="bpHasInvention(bp)">
@@ -246,6 +254,8 @@
                                                             <template x-if="bp.products && bp.products.length > 0">
                                                                 <span class="bp-produces">
                                                                     Produces: <span x-text="bp.products.map(p => (p.quantity > 1 ? p.quantity + 'x ' : '') + p.type_name).join(', ')"></span>
+                                                                    <button class="copy-btn" title="Copy product name"
+                                                                            @click.stop="navigator.clipboard.writeText(bp.products[0].type_name)">&#x2398;</button>
                                                                 </span>
                                                             </template>
                                                             <template x-if="bpTotalCost(bp) != null">
@@ -497,8 +507,9 @@
                                                             </span>
                                                         </template>
                                                         <template x-if="inventionExpectedCostPerSuccess(bp) != null">
-                                                            <span class="bp-cost-item bp-invention-expected">
-                                                                <span class="bp-cost-label">Expected/Success</span>
+                                                            <span class="bp-cost-item bp-invention-expected"
+                                                                  title="Average cost per successful invention (attempt cost / success probability)">
+                                                                <span class="bp-cost-label">Avg Cost/Success</span>
                                                                 <span class="bp-cost-value" x-text="formatISK(inventionExpectedCostPerSuccess(bp)) + ' ISK'"></span>
                                                             </span>
                                                         </template>
@@ -568,6 +579,120 @@
                                                         <span class="bp-cost-label">Time:</span>
                                                         <span x-text="formatDuration(inventionData[bp.type_id]?.time)"></span>
                                                     </div>
+
+                                                    <!-- T2 Profit Analysis -->
+                                                    <template x-if="inventionT2Profit(bp, 'sell', 'sell') || inventionT2Profit(bp, 'sell', 'order')">
+                                                        <div class="bp-profit-section">
+                                                            <div class="bp-profit-header">
+                                                                <span>T2 Profit Analysis</span>
+                                                                <span class="bp-profit-product-info" x-show="t2MfgData[selectedT2Product[bp.type_id]]">
+                                                                    <span x-text="t2MfgData[selectedT2Product[bp.type_id]]?.products?.[0]?.type_name"></span>
+                                                                    <span x-show="(t2MfgData[selectedT2Product[bp.type_id]]?.products?.[0]?.quantity || 1) > 1"
+                                                                          x-text="'x' + (t2MfgData[selectedT2Product[bp.type_id]]?.products?.[0]?.quantity || 1)"></span>
+                                                                    &mdash;
+                                                                    Sell: <span class="bp-profit-price"
+                                                                                x-text="materialPrices[t2MfgData[selectedT2Product[bp.type_id]]?.products?.[0]?.type_id]?.sell != null ? formatISK(materialPrices[t2MfgData[selectedT2Product[bp.type_id]]?.products?.[0]?.type_id].sell) : '\u2014'"></span>
+                                                                    Buy: <span class="bp-profit-price"
+                                                                               x-text="materialPrices[t2MfgData[selectedT2Product[bp.type_id]]?.products?.[0]?.type_id]?.buy != null ? formatISK(materialPrices[t2MfgData[selectedT2Product[bp.type_id]]?.products?.[0]?.type_id].buy) : '\u2014'"></span>
+                                                                </span>
+                                                                <span class="bp-profit-product-info" x-show="t2MfgData[selectedT2Product[bp.type_id]]">
+                                                                    ME <span x-text="inventionOutput(bp).me"></span> /
+                                                                    <span x-text="inventionOutput(bp).runs"></span> run<span x-show="inventionOutput(bp).runs !== 1">s</span>
+                                                                </span>
+                                                            </div>
+
+                                                            <table class="bp-profit-table">
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th></th>
+                                                                        <th>Instant Sell</th>
+                                                                        <th>Sell Order</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    <tr>
+                                                                        <td class="bp-profit-row-label">Instant Buy</td>
+                                                                        <td>
+                                                                            <template x-if="inventionT2Profit(bp, 'sell', 'sell')">
+                                                                                <span :class="inventionT2Profit(bp, 'sell', 'sell').profit >= 0 ? 'profit-positive' : 'profit-negative'">
+                                                                                    <span x-text="formatISK(inventionT2Profit(bp, 'sell', 'sell').profit) + ' ISK'"></span>
+                                                                                    <span class="bp-profit-margin" x-text="'(' + (inventionT2Profit(bp, 'sell', 'sell').margin * 100).toFixed(1) + '%)'"></span>
+                                                                                </span>
+                                                                            </template>
+                                                                            <template x-if="!inventionT2Profit(bp, 'sell', 'sell')">
+                                                                                <span class="bp-profit-na">&mdash;</span>
+                                                                            </template>
+                                                                        </td>
+                                                                        <td>
+                                                                            <template x-if="inventionT2Profit(bp, 'sell', 'order')">
+                                                                                <span :class="inventionT2Profit(bp, 'sell', 'order').profit >= 0 ? 'profit-positive' : 'profit-negative'">
+                                                                                    <span x-text="formatISK(inventionT2Profit(bp, 'sell', 'order').profit) + ' ISK'"></span>
+                                                                                    <span class="bp-profit-margin" x-text="'(' + (inventionT2Profit(bp, 'sell', 'order').margin * 100).toFixed(1) + '%)'"></span>
+                                                                                </span>
+                                                                            </template>
+                                                                            <template x-if="!inventionT2Profit(bp, 'sell', 'order')">
+                                                                                <span class="bp-profit-na">&mdash;</span>
+                                                                            </template>
+                                                                        </td>
+                                                                    </tr>
+                                                                    <tr>
+                                                                        <td class="bp-profit-row-label">Buy Order</td>
+                                                                        <td>
+                                                                            <template x-if="inventionT2Profit(bp, 'buy', 'sell')">
+                                                                                <span :class="inventionT2Profit(bp, 'buy', 'sell').profit >= 0 ? 'profit-positive' : 'profit-negative'">
+                                                                                    <span x-text="formatISK(inventionT2Profit(bp, 'buy', 'sell').profit) + ' ISK'"></span>
+                                                                                    <span class="bp-profit-margin" x-text="'(' + (inventionT2Profit(bp, 'buy', 'sell').margin * 100).toFixed(1) + '%)'"></span>
+                                                                                </span>
+                                                                            </template>
+                                                                            <template x-if="!inventionT2Profit(bp, 'buy', 'sell')">
+                                                                                <span class="bp-profit-na">&mdash;</span>
+                                                                            </template>
+                                                                        </td>
+                                                                        <td>
+                                                                            <template x-if="inventionT2Profit(bp, 'buy', 'order')">
+                                                                                <span :class="inventionT2Profit(bp, 'buy', 'order').profit >= 0 ? 'profit-positive' : 'profit-negative'">
+                                                                                    <span x-text="formatISK(inventionT2Profit(bp, 'buy', 'order').profit) + ' ISK'"></span>
+                                                                                    <span class="bp-profit-margin" x-text="'(' + (inventionT2Profit(bp, 'buy', 'order').margin * 100).toFixed(1) + '%)'"></span>
+                                                                                </span>
+                                                                            </template>
+                                                                            <template x-if="!inventionT2Profit(bp, 'buy', 'order')">
+                                                                                <span class="bp-profit-na">&mdash;</span>
+                                                                            </template>
+                                                                        </td>
+                                                                    </tr>
+                                                                </tbody>
+                                                            </table>
+
+                                                            <!-- Detailed Breakdown -->
+                                                            <template x-if="inventionT2Profit(bp, 'sell', 'order')">
+                                                                <div class="bp-profit-breakdown">
+                                                                    <span class="bp-profit-breakdown-title">Breakdown (Instant Buy + Sell Order):</span>
+                                                                    <div class="bp-profit-breakdown-items">
+                                                                        <span class="bp-breakdown-item">
+                                                                            <span class="bp-breakdown-label">T2 Materials</span>
+                                                                            <span class="bp-breakdown-value" x-text="formatISK(inventionT2Profit(bp, 'sell', 'order').materialCost) + ' ISK'"></span>
+                                                                        </span>
+                                                                        <span class="bp-breakdown-item">
+                                                                            <span class="bp-breakdown-label">T2 Job Cost</span>
+                                                                            <span class="bp-breakdown-value" x-text="formatISK(inventionT2Profit(bp, 'sell', 'order').jobCost) + ' ISK'"></span>
+                                                                        </span>
+                                                                        <span class="bp-breakdown-item">
+                                                                            <span class="bp-breakdown-label">Invention/Run</span>
+                                                                            <span class="bp-breakdown-value" x-text="formatISK(inventionT2Profit(bp, 'sell', 'order').inventionCostPerRun) + ' ISK'"></span>
+                                                                        </span>
+                                                                        <span class="bp-breakdown-item">
+                                                                            <span class="bp-breakdown-label">Sales Tax</span>
+                                                                            <span class="bp-breakdown-value" x-text="formatISK(inventionT2Profit(bp, 'sell', 'order').salesTax) + ' ISK'"></span>
+                                                                        </span>
+                                                                        <span class="bp-breakdown-item">
+                                                                            <span class="bp-breakdown-label">Broker Fee</span>
+                                                                            <span class="bp-breakdown-value" x-text="formatISK(inventionT2Profit(bp, 'sell', 'order').sellBrokerFee) + ' ISK'"></span>
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            </template>
+                                                        </div>
+                                                    </template>
                                                 </div>
                                             </template>
                                         </div>

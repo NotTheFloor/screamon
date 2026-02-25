@@ -189,6 +189,11 @@ class ESIClient:
         cid = self.token.character_id
         return await self._request_paginated("GET", f"/v3/characters/{cid}/blueprints/")
 
+    async def get_character_assets(self) -> list:
+        """Get all assets in the active character's inventory (paginated)."""
+        cid = self.token.character_id
+        return await self._request_paginated("GET", f"/v5/characters/{cid}/assets/")
+
     async def resolve_type_names(self, type_ids: list[int]) -> dict[int, str]:
         """
         Resolve type IDs to names via POST /universe/names/.

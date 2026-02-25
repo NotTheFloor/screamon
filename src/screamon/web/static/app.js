@@ -14,6 +14,7 @@ function dashboard() {
         showBPC: true,
         showReactions: true,
         showInvention: false,
+        bpSearchQuery: '',
         sortMode: 'name',           // 'name', 'max_profit', 'min_profit'
         bulkLoading: false,
         bulkProgress: 0,
@@ -63,6 +64,7 @@ function dashboard() {
         selectedT2Product: {},      // bp.type_id -> T2 product type_id
         inventionEIVs: {},          // t2_bp_type_id -> EIV value
         inventionSCI: null,         // invention system cost index
+        t2MfgData: {},              // t2_bp_type_id -> {materials, products, activity_type, ...}
 
         init() {
             this.loadDetectors();
@@ -158,8 +160,18 @@ function dashboard() {
                 .map(s => s.trim().toLowerCase())
                 .filter(s => s.length > 0);
 
+            // Search filter
+            const query = this.bpSearchQuery.trim().toLowerCase();
+
             // Type filter
             let list = this.blueprints.filter(bp => {
+                if (query) {
+                    const nameMatch = bp.type_name.toLowerCase().includes(query);
+                    const productMatch = bp.products && bp.products.some(
+                        p => (p.type_name || '').toLowerCase().includes(query)
+                    );
+                    if (!nameMatch && !productMatch) return false;
+                }
                 const kind = this.bpKind(bp);
                 if (kind === 'bpo' && !this.showBPO) return false;
                 if (kind === 'bpc' && !this.showBPC) return false;
@@ -1012,17 +1024,30 @@ function dashboard() {
                     await Promise.all(pricePromises);
                 }
             }
+
+            // Load T2 manufacturing data for profit analysis
+            const t2Id = this.selectedT2Product[bp.type_id];
+            if (t2Id && !this.t2MfgData[t2Id]) {
+                await this._loadT2MfgData(bp, t2Id);
+            }
         },
 
         async onT2ProductChange(bp) {
             const t2Id = this.selectedT2Product[bp.type_id];
-            if (t2Id && !(t2Id in this.inventionEIVs)) {
-                try {
-                    const data = await this.fetchAPI(`/market/eiv/invention/${t2Id}`);
-                    this.inventionEIVs[t2Id] = data.eiv;
-                } catch (e) {
-                    console.error('Failed to load invention EIV', e);
-                }
+            if (!t2Id) return;
+            const promises = [];
+            if (!(t2Id in this.inventionEIVs)) {
+                promises.push(
+                    this.fetchAPI(`/market/eiv/invention/${t2Id}`)
+                        .then(data => { this.inventionEIVs[t2Id] = data.eiv; })
+                        .catch(e => console.error('Failed to load invention EIV', e))
+                );
+            }
+            if (!this.t2MfgData[t2Id]) {
+                promises.push(this._loadT2MfgData(bp, t2Id));
+            }
+            if (promises.length > 0) {
+                await Promise.all(promises);
             }
         },
 
@@ -1146,6 +1171,130 @@ function dashboard() {
             const prob = this.characterSkillsLoaded ? character : maxSkill;
             if (attemptCost == null || prob <= 0) return null;
             return attemptCost / prob;
+        },
+
+        // T2 profit analysis for invention tab
+        async _loadT2MfgData(bp, t2BpId) {
+            try {
+                const data = await this.fetchAPI(`/sde/blueprints/${t2BpId}/materials`);
+                this.t2MfgData[t2BpId] = {
+                    blueprint_type_id: t2BpId,
+                    ...data,
+                };
+
+                const promises = [];
+
+                // Load rig category for facility bonuses
+                if (this.selectedFacility && !(t2BpId in this.blueprintRigCategories)) {
+                    promises.push(
+                        this.fetchAPI(`/sde/rig-category/${t2BpId}`)
+                            .then(d => { this.blueprintRigCategories[t2BpId] = d.rig_category; })
+                            .catch(e => console.error('Failed to load T2 rig category', e))
+                    );
+                }
+
+                // Load T2 material + product prices
+                const allIds = [
+                    ...data.materials.map(m => m.type_id),
+                    ...data.products.map(p => p.type_id),
+                ].filter(id => !(id in this.materialPrices));
+                if (allIds.length > 0) {
+                    promises.push(
+                        this.fetchAPI(`/market/prices?type_ids=${allIds.join(',')}`)
+                            .then(d => Object.assign(this.materialPrices, d.prices))
+                            .catch(e => console.error('Failed to load T2 material prices', e))
+                    );
+                }
+
+                // Load T2 blueprint EIV for manufacturing job cost
+                if (!(t2BpId in this.bpEIVs)) {
+                    promises.push(
+                        this.fetchAPI(`/market/eiv/${t2BpId}`)
+                            .then(d => { this.bpEIVs[t2BpId] = d.eiv; })
+                            .catch(e => console.error('Failed to load T2 blueprint EIV', e))
+                    );
+                }
+
+                // Ensure manufacturing SCI is loaded
+                if (this.systemCostIndex === null) {
+                    promises.push(
+                        this.fetchAPI(`/market/system-cost-index?system=${encodeURIComponent(this.systemName)}`)
+                            .then(d => { this.systemCostIndex = d.cost_index; })
+                            .catch(e => console.error('Failed to load manufacturing SCI', e))
+                    );
+                }
+
+                if (promises.length > 0) {
+                    await Promise.all(promises);
+                }
+            } catch (e) {
+                console.error('Failed to load T2 manufacturing data', e);
+            }
+        },
+
+        _inventionT2VirtualBp(bp) {
+            const t2BpId = this.selectedT2Product[bp.type_id];
+            if (!t2BpId) return null;
+            const mfgData = this.t2MfgData[t2BpId];
+            if (!mfgData) return null;
+            const output = this.inventionOutput(bp);
+            return {
+                type_id: t2BpId,
+                material_efficiency: output.me,
+                time_efficiency: output.te,
+                activity_type: mfgData.activity_type || 'manufacturing',
+                materials: mfgData.materials,
+                products: mfgData.products,
+            };
+        },
+
+        inventionT2Profit(bp, inputMode, outputMode) {
+            const t2Bp = this._inventionT2VirtualBp(bp);
+            if (!t2Bp) return null;
+
+            const qty = this.productQuantity(t2Bp);
+
+            // Revenue from selling T2 product
+            let unitPrice;
+            if (outputMode === 'sell') {
+                unitPrice = this.productBuyPrice(t2Bp);
+            } else {
+                unitPrice = this.productSellPrice(t2Bp);
+            }
+            if (unitPrice == null) return null;
+            const grossRevenue = unitPrice * qty;
+            const salesTax = grossRevenue * this.salesTaxRate;
+            const sellBrokerFee = outputMode === 'order' ? grossRevenue * this.brokerFeeRate : 0;
+            const revenue = grossRevenue - salesTax - sellBrokerFee;
+
+            // T2 manufacturing material cost
+            let materialCost;
+            if (inputMode === 'sell') {
+                materialCost = this.bpTotalCost(t2Bp);
+            } else {
+                materialCost = this.bpTotalCostBuyOrder(t2Bp);
+            }
+            if (materialCost == null) return null;
+            const buyBrokerFee = inputMode === 'buy' ? materialCost * this.brokerFeeRate : 0;
+
+            // T2 manufacturing job cost
+            const jobCost = this.bpJobCost(t2Bp) || 0;
+
+            // Invention cost amortized per manufacturing run
+            const expectedCost = this.inventionExpectedCostPerSuccess(bp);
+            const invOutput = this.inventionOutput(bp);
+            const runsPerSuccess = invOutput.runs || 1;
+            const inventionCostPerRun = expectedCost != null ? expectedCost / runsPerSuccess : 0;
+
+            const totalCost = materialCost + buyBrokerFee + jobCost + inventionCostPerRun;
+            const profit = revenue - totalCost;
+            const margin = grossRevenue > 0 ? profit / grossRevenue : 0;
+
+            return {
+                grossRevenue, salesTax, sellBrokerFee, revenue,
+                materialCost, buyBrokerFee, jobCost, inventionCostPerRun,
+                totalCost, profit, margin,
+            };
         },
 
         // Bulk loading for profit sorting

@@ -118,6 +118,7 @@
                 <template x-if="currentChainId">
                     <button class="secondary" @click="deleteChain(currentChainId)">Delete</button>
                 </template>
+                <button class="secondary" @click="generatePurchaseReport()">Purchase Report</button>
             </div>
         </section>
 
@@ -137,6 +138,186 @@
                         <button @click="saveChain()" :disabled="!chainName.trim()">Save</button>
                         <button class="secondary" @click="showSaveDialog = false">Cancel</button>
                     </div>
+                </div>
+            </div>
+        </template>
+
+        <!-- Purchase Report Modal -->
+        <template x-if="showPurchaseReport">
+            <div class="modal-overlay" @click.self="showPurchaseReport = false"
+                 @keydown.escape.window="showPurchaseReport = false">
+                <div class="modal modal-wide">
+                    <h3>Purchase Report</h3>
+                    <template x-if="purchaseReportLoading">
+                        <div class="loading">Generating report...</div>
+                    </template>
+                    <template x-if="!purchaseReportLoading && purchaseReportHasData()">
+                        <div class="purchase-report-body">
+                            <div class="purchase-report-scroll">
+
+                                <!-- Manufacture Section -->
+                                <template x-if="purchaseReportSections.manufacture.length > 0">
+                                    <div class="purchase-section">
+                                        <h4 class="purchase-section-title">Manufacture</h4>
+                                        <table class="purchase-report-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Product</th>
+                                                    <th>Activity</th>
+                                                    <th class="text-right">Needed</th>
+                                                    <th class="text-right">Have</th>
+                                                    <th class="text-right">To Make</th>
+                                                    <th class="text-right">Runs</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <template x-for="(row, idx) in purchaseReportSections.manufacture" :key="'mfg-'+idx">
+                                                    <tr :class="{ 'purchase-fulfilled': row.toManufacture <= 0 }">
+                                                        <td x-text="row.type_name"></td>
+                                                        <td x-text="row.activity_type === 'reaction' ? 'Reaction' : 'Manufacturing'"></td>
+                                                        <td class="text-right" x-text="formatQuantity(row.needed)"></td>
+                                                        <td class="text-right" x-text="formatQuantity(row.have)"></td>
+                                                        <td class="text-right" x-text="formatQuantity(row.toManufacture)"></td>
+                                                        <td class="text-right" x-text="formatQuantity(row.runs)"></td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </template>
+
+                                <!-- Buy Section -->
+                                <template x-if="purchaseReportSections.buy.length > 0">
+                                    <div class="purchase-section">
+                                        <h4 class="purchase-section-title">Buy (Instant)</h4>
+                                        <table class="purchase-report-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Material</th>
+                                                    <th class="text-right">Needed</th>
+                                                    <th class="text-right">Have</th>
+                                                    <th class="text-right">To Buy</th>
+                                                    <th class="text-right">Unit Price</th>
+                                                    <th class="text-right">Total</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <template x-for="(row, idx) in purchaseReportSections.buy" :key="'buy-'+idx">
+                                                    <tr :class="{ 'purchase-fulfilled': row.toBuy <= 0 }">
+                                                        <td x-text="row.type_name"></td>
+                                                        <td class="text-right" x-text="formatQuantity(row.needed)"></td>
+                                                        <td class="text-right" x-text="formatQuantity(row.have)"></td>
+                                                        <td class="text-right" x-text="formatQuantity(row.toBuy)"></td>
+                                                        <td class="text-right" x-text="formatISK(row.unitPrice)"></td>
+                                                        <td class="text-right" x-text="formatISK(row.totalPrice)"></td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                            <tfoot>
+                                                <tr class="purchase-report-total">
+                                                    <td colspan="5"><strong>Subtotal</strong></td>
+                                                    <td class="text-right"><strong x-text="formatISK(sectionTotal('buy'))"></strong></td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                </template>
+
+                                <!-- Order Section -->
+                                <template x-if="purchaseReportSections.order.length > 0">
+                                    <div class="purchase-section">
+                                        <h4 class="purchase-section-title">Order (Buy Order)</h4>
+                                        <table class="purchase-report-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Material</th>
+                                                    <th class="text-right">Needed</th>
+                                                    <th class="text-right">Have</th>
+                                                    <th class="text-right">To Buy</th>
+                                                    <th class="text-right">Unit Price</th>
+                                                    <th class="text-right">Total</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <template x-for="(row, idx) in purchaseReportSections.order" :key="'ord-'+idx">
+                                                    <tr :class="{ 'purchase-fulfilled': row.toBuy <= 0 }">
+                                                        <td x-text="row.type_name"></td>
+                                                        <td class="text-right" x-text="formatQuantity(row.needed)"></td>
+                                                        <td class="text-right" x-text="formatQuantity(row.have)"></td>
+                                                        <td class="text-right" x-text="formatQuantity(row.toBuy)"></td>
+                                                        <td class="text-right" x-text="formatISK(row.unitPrice)"></td>
+                                                        <td class="text-right" x-text="formatISK(row.totalPrice)"></td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                            <tfoot>
+                                                <tr class="purchase-report-total">
+                                                    <td colspan="5"><strong>Subtotal</strong></td>
+                                                    <td class="text-right"><strong x-text="formatISK(sectionTotal('order'))"></strong></td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                </template>
+
+                                <!-- Produce Section -->
+                                <template x-if="purchaseReportSections.produce.length > 0">
+                                    <div class="purchase-section">
+                                        <h4 class="purchase-section-title">Produce (Already Owned)</h4>
+                                        <table class="purchase-report-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Material</th>
+                                                    <th class="text-right">Needed</th>
+                                                    <th class="text-right">Have</th>
+                                                    <th class="text-right">To Acquire</th>
+                                                    <th class="text-right">Unit Price</th>
+                                                    <th class="text-right">Opp. Cost</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <template x-for="(row, idx) in purchaseReportSections.produce" :key="'prd-'+idx">
+                                                    <tr :class="{ 'purchase-fulfilled': row.toBuy <= 0 }">
+                                                        <td x-text="row.type_name"></td>
+                                                        <td class="text-right" x-text="formatQuantity(row.needed)"></td>
+                                                        <td class="text-right" x-text="formatQuantity(row.have)"></td>
+                                                        <td class="text-right" x-text="formatQuantity(row.toBuy)"></td>
+                                                        <td class="text-right" x-text="formatISK(row.unitPrice)"></td>
+                                                        <td class="text-right" x-text="formatISK(row.totalPrice)"></td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                            <tfoot>
+                                                <tr class="purchase-report-total">
+                                                    <td colspan="5"><strong>Subtotal</strong></td>
+                                                    <td class="text-right"><strong x-text="formatISK(sectionTotal('produce'))"></strong></td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                </template>
+
+                                <!-- Grand Total -->
+                                <div class="purchase-grand-total">
+                                    <span>Grand Total (Buy + Order + Produce)</span>
+                                    <strong x-text="formatISK(purchaseReportGrandTotal()) + ' ISK'"></strong>
+                                </div>
+
+                            </div>
+                            <div class="modal-actions">
+                                <button @click="copyPurchaseReport()">Copy Multibuy</button>
+                                <button class="secondary" @click="showPurchaseReport = false">Close</button>
+                            </div>
+                        </div>
+                    </template>
+                    <template x-if="!purchaseReportLoading && !purchaseReportHasData()">
+                        <div>
+                            <p style="color: var(--text-muted);">No materials found in chain.</p>
+                            <div class="modal-actions">
+                                <button class="secondary" @click="showPurchaseReport = false">Close</button>
+                            </div>
+                        </div>
+                    </template>
                 </div>
             </div>
         </template>

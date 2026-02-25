@@ -54,6 +54,13 @@ function chainCalculator() {
         chainName: '',
         showSaveDialog: false,
 
+        // Purchase report
+        showPurchaseReport: false,
+        purchaseReportSections: { manufacture: [], buy: [], order: [], produce: [] },
+        purchaseReportLoading: false,
+        inventoryMap: {},
+        inventoryLoaded: false,
+
         // Link propagation
         linkGroups: {},       // type_id -> { source, me, blueprint_type_id, activity_type, base_materials, ... }
         _propagating: false,  // guard flag to prevent circular propagation
@@ -410,6 +417,7 @@ function chainCalculator() {
         // only charge the fraction actually consumed (e.g. need 700, run produces 1500 → 0.467).
         // Leftovers are used elsewhere and shouldn't be fully costed to this product.
         nodeProrateFactor(node) {
+            if (!node) return 1.0;
             if (!this.proratePartialRuns) return 1.0;
             if (node.source !== 'manufacture') return 1.0;
             const totalOutput = node.runs * node.base_product_qty;
@@ -419,6 +427,7 @@ function chainCalculator() {
 
         // Cost calculations (cached per render cycle)
         nodeCost(node) {
+            if (!node) return null;
             if (node.id in this._costCache) return this._costCache[node.id];
             const cost = this._computeNodeCost(node);
             this._costCache[node.id] = cost;
@@ -446,6 +455,7 @@ function chainCalculator() {
                 // Sum of children costs + job cost, prorated if partial run
                 let fullCost = 0;
                 for (const child of (node.children || [])) {
+                    if (!child) continue;
                     const childCost = this.nodeCost(child);
                     if (childCost == null) return null;
                     fullCost += childCost;
@@ -458,6 +468,7 @@ function chainCalculator() {
         },
 
         nodeJobCost(node) {
+            if (!node) return null;
             if (node.source !== 'manufacture' || !node.blueprint_type_id) return null;
 
             const eiv = this.eivCache[node.blueprint_type_id];
@@ -493,6 +504,7 @@ function chainCalculator() {
             if (!node) return 0;
             let total = 0;
             for (const child of (node.children || [])) {
+                if (!child) continue;
                 if (child.source === 'manufacture') {
                     const childFactor = factor * this.nodeProrateFactor(child);
                     total += this._sumLeafCosts(child, childFactor);
@@ -521,6 +533,7 @@ function chainCalculator() {
                 if (jc != null) total += jc * factor;
             }
             for (const child of (node.children || [])) {
+                if (!child) continue;
                 if (child.source === 'manufacture') {
                     const childFactor = factor * this.nodeProrateFactor(child);
                     total += this._sumJobCosts(child, childFactor);
@@ -1187,6 +1200,214 @@ function chainCalculator() {
                 }
             };
             if (this.rootNode) walk(this.rootNode);
+        },
+
+        // Purchase Report
+
+        async generatePurchaseReport() {
+            this.purchaseReportLoading = true;
+            this.showPurchaseReport = true;
+            this.purchaseReportSections = { manufacture: [], buy: [], order: [], produce: [] };
+
+            try {
+                // Load inventory from ESI if not cached
+                if (!this.inventoryLoaded) {
+                    await this._loadInventory();
+                }
+
+                // Clone inventory so we can "spend" items as we walk the tree
+                const remaining = { ...this.inventoryMap };
+
+                // Aggregation maps keyed by type_id
+                const leafAgg = {};       // buy/order/produce materials
+                const mfgAgg = {};        // manufacture jobs
+
+                // Inventory-aware recursive tree walk.
+                this._walkForReport(this.rootNode, this.rootNode.required_qty, remaining, leafAgg, mfgAgg);
+
+                // Build leaf rows by source
+                const sections = { manufacture: [], buy: [], order: [], produce: [] };
+
+                for (const [, info] of Object.entries(leafAgg)) {
+                    const tid = info.type_id;
+                    const have = this.inventoryMap[tid] || 0;
+                    const toBuy = Math.max(0, info.needed - have);
+                    const p = this.prices[tid];
+                    let unitPrice = 0;
+                    if (info.source === 'buy') {
+                        unitPrice = p?.sell || 0;
+                    } else {
+                        unitPrice = p?.buy || 0;
+                    }
+                    // Treat any unexpected source as 'buy'
+                    const section = sections[info.source] ? info.source : 'buy';
+                    sections[section].push({
+                        type_id: tid,
+                        type_name: info.type_name,
+                        needed: info.needed,
+                        have,
+                        toBuy,
+                        unitPrice,
+                        totalPrice: unitPrice * toBuy,
+                    });
+                }
+
+                // Build manufacture rows
+                for (const [typeId, info] of Object.entries(mfgAgg)) {
+                    const tid = parseInt(typeId);
+                    const have = this.inventoryMap[tid] || 0;
+                    sections.manufacture.push({
+                        type_id: tid,
+                        type_name: info.type_name,
+                        needed: info.needed,
+                        have,
+                        toManufacture: Math.max(0, info.needed - have),
+                        runs: info.runs,
+                        base_product_qty: info.base_product_qty,
+                        activity_type: info.activity_type,
+                    });
+                }
+
+                // Sort each section alphabetically
+                for (const key of Object.keys(sections)) {
+                    sections[key].sort((a, b) => a.type_name.localeCompare(b.type_name));
+                }
+
+                this.purchaseReportSections = sections;
+            } catch (e) {
+                console.error('Failed to generate purchase report', e);
+            } finally {
+                this.purchaseReportLoading = false;
+            }
+        },
+
+        // Recursive tree walk that accounts for inventory of intermediate products.
+        // `remaining` is a mutable map of available inventory (decremented as consumed).
+        // Returns the quantity that actually needs to be manufactured/acquired (after inventory).
+        _walkForReport(node, neededQty, remaining, leafAgg, mfgAgg) {
+            if (!node || neededQty <= 0) return 0;
+
+            // Only recurse into manufacture nodes; leaf nodes are accumulated by the parent
+            if (node.source !== 'manufacture' && node !== this.rootNode) {
+                return neededQty;
+            }
+
+            const isRoot = node === this.rootNode;
+            let actualNeeded = neededQty;
+            let fullyFromInventory = false;
+
+            // For intermediate manufacture nodes, check inventory first
+            if (!isRoot) {
+                const onHand = remaining[node.type_id] || 0;
+                if (onHand >= actualNeeded) {
+                    remaining[node.type_id] -= actualNeeded;
+                    fullyFromInventory = true;
+                } else if (onHand > 0) {
+                    actualNeeded -= onHand;
+                    remaining[node.type_id] = 0;
+                }
+
+                // Always track in manufacture aggregation (even if fulfilled)
+                const mfgNeeded = fullyFromInventory ? 0 : actualNeeded;
+                const runs = fullyFromInventory ? 0 : Math.ceil(actualNeeded / node.base_product_qty);
+                if (!mfgAgg[node.type_id]) {
+                    mfgAgg[node.type_id] = {
+                        type_name: node.type_name,
+                        needed: neededQty,
+                        runs: 0,
+                        base_product_qty: node.base_product_qty,
+                        activity_type: node.activity_type,
+                    };
+                } else {
+                    mfgAgg[node.type_id].needed += neededQty;
+                }
+                mfgAgg[node.type_id].runs += runs;
+
+                // If fully covered by inventory, skip child material walk
+                if (fullyFromInventory) return 0;
+            }
+
+            const runs = isRoot
+                ? node.runs
+                : Math.ceil(actualNeeded / node.base_product_qty);
+
+            // Recurse into children — use base_materials for quantity calc,
+            // children for source and sub-tree
+            const children = node.children || [];
+            const baseMats = node.base_materials || [];
+
+            for (let i = 0; i < children.length; i++) {
+                const child = children[i];
+                if (!child) continue;
+                // Match by index first (buildChildren creates 1:1), fallback to type_id find
+                const mat = (i < baseMats.length && baseMats[i]?.type_id === child.type_id)
+                    ? baseMats[i]
+                    : baseMats.find(m => m.type_id === child.type_id);
+                if (!mat) continue;
+
+                const adjustedPerRun = this.adjustedMatQuantity(node, mat);
+                const childNeeded = adjustedPerRun * runs;
+
+                if (child.source === 'manufacture' && child.children && child.children.length > 0) {
+                    this._walkForReport(child, childNeeded, remaining, leafAgg, mfgAgg);
+                } else {
+                    // Leaf node (buy/order/produce or manufacture without children)
+                    const key = `${child.type_id}:${child.source}`;
+                    if (!leafAgg[key]) {
+                        leafAgg[key] = {
+                            type_id: child.type_id,
+                            type_name: child.type_name,
+                            needed: 0,
+                            source: child.source,
+                        };
+                    }
+                    leafAgg[key].needed += childNeeded;
+                }
+            }
+
+            return actualNeeded;
+        },
+
+        async _loadInventory() {
+            try {
+                const assets = await this.fetchAPI('/esi/data/assets');
+                const map = {};
+                for (const asset of assets) {
+                    const tid = asset.type_id;
+                    map[tid] = (map[tid] || 0) + (asset.quantity || 1);
+                }
+                this.inventoryMap = map;
+            } catch (e) {
+                // No ESI character or auth — inventory stays empty
+                console.warn('Could not load inventory (ESI not available)', e);
+                this.inventoryMap = {};
+            }
+            this.inventoryLoaded = true;
+        },
+
+        purchaseReportHasData() {
+            const s = this.purchaseReportSections;
+            return s.manufacture.length + s.buy.length + s.order.length + s.produce.length > 0;
+        },
+
+        sectionTotal(sectionKey) {
+            return (this.purchaseReportSections[sectionKey] || [])
+                .reduce((sum, r) => sum + (r.totalPrice || 0), 0);
+        },
+
+        purchaseReportGrandTotal() {
+            return this.sectionTotal('buy') + this.sectionTotal('order') + this.sectionTotal('produce');
+        },
+
+        copyPurchaseReport() {
+            const lines = [];
+            for (const row of this.purchaseReportSections.buy) {
+                if (row.toBuy > 0) lines.push(`${row.type_name}\t${row.toBuy}`);
+            }
+            for (const row of this.purchaseReportSections.order) {
+                if (row.toBuy > 0) lines.push(`${row.type_name}\t${row.toBuy}`);
+            }
+            navigator.clipboard.writeText(lines.join('\n'));
         },
 
         // Formatting

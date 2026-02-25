@@ -26,6 +26,7 @@ class ESIConfig:
         "esi-characters.read_standings.v1",
         "esi-characters.read_blueprints.v1",
         "esi-skills.read_skills.v1",
+        "esi-assets.read_assets.v1",
     ])
 
 

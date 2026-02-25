@@ -110,6 +110,7 @@ class SDEData:
         self._invention_data: dict[int, dict] = {}  # T1 bp_type_id -> invention activity
         self._decryptors: dict[int, dict] = {}  # type_id -> {name, prob_mult, ...}
         self._t2_bp_materials: dict[int, dict] = {}  # T2 bp_type_id -> {materials, bp_type_id}
+        self._product_to_blueprint: dict[int, int] = {}  # product type_id -> blueprint type_id
         self._t2_to_t1_bp: dict[int, int] = {}  # T2 bp_type_id -> T1 bp_type_id
         self._encryption_skill_ids: set[int] = set()  # typeIDs of Encryption Methods skills
         self._loaded = False
@@ -167,6 +168,9 @@ class SDEData:
         for t1_bp_id, invention in self._invention_data.items():
             for prod in invention.get("products", []):
                 self._t2_to_t1_bp[prod["typeID"]] = t1_bp_id
+
+        # Build reverse product -> blueprint mapping
+        self._product_to_blueprint = {v: k for k, v in self._blueprint_products.items()}
 
         # Collect all type IDs we need names for (materials + products + blueprint itself)
         needed_ids: set[int] = set()
@@ -407,6 +411,10 @@ class SDEData:
             "products": products,
             "activity_type": activity_type,
         }
+
+    def get_blueprint_by_product(self, product_type_id: int) -> int | None:
+        """Get the blueprint type ID that produces a given product type ID."""
+        return self._product_to_blueprint.get(product_type_id)
 
     def get_system_id(self, name: str) -> int | None:
         """Get solar system ID by name (case-insensitive)."""

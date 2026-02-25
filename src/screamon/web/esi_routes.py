@@ -260,6 +260,12 @@ def create_esi_routes(
             async with await self._get_client() as client:
                 return await client.get_character_skills()
 
+        @get("/assets")
+        async def get_assets(self) -> list:
+            """Get active character's assets."""
+            async with await self._get_client() as client:
+                return await client.get_character_assets()
+
         @get("/blueprints")
         async def get_blueprints(self) -> list[dict]:
             """Get active character's blueprints with resolved names."""
@@ -326,6 +332,52 @@ def create_esi_routes(
             if existing is None:
                 raise HTTPException(status_code=404, detail="Facility not found")
             db.delete_facility(facility_id)
+            return {"status": "ok"}
+
+    class ChainController(Controller):
+        """Saved chain configuration CRUD endpoints."""
+
+        path = "/api/chains"
+
+        @get("/")
+        async def list_chains(self) -> list[dict]:
+            """List all saved chains (summary: id, name, type_id, activity_type, updated_at)."""
+            return db.get_all_chains()
+
+        @post("/")
+        async def create_chain(self, data: dict) -> dict:
+            """Save a new chain configuration."""
+            required = ("name", "type_id")
+            for field in required:
+                if field not in data:
+                    raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
+            chain_id = db.save_chain(data)
+            return {"id": chain_id, "status": "ok"}
+
+        @get("/{chain_id:int}")
+        async def get_chain(self, chain_id: int) -> dict:
+            """Get a full saved chain configuration by ID."""
+            chain = db.get_chain(chain_id)
+            if chain is None:
+                raise HTTPException(status_code=404, detail="Chain not found")
+            return chain
+
+        @put("/{chain_id:int}")
+        async def update_chain(self, chain_id: int, data: dict) -> dict:
+            """Update an existing saved chain."""
+            existing = db.get_chain(chain_id)
+            if existing is None:
+                raise HTTPException(status_code=404, detail="Chain not found")
+            db.update_chain(chain_id, data)
+            return {"status": "ok"}
+
+        @delete("/{chain_id:int}", status_code=200)
+        async def delete_chain(self, chain_id: int) -> dict:
+            """Delete a saved chain."""
+            existing = db.get_chain(chain_id)
+            if existing is None:
+                raise HTTPException(status_code=404, detail="Chain not found")
+            db.delete_chain(chain_id)
             return {"status": "ok"}
 
     class SDEController(Controller):
@@ -440,6 +492,39 @@ def create_esi_routes(
                     detail=f"No invention source for type {type_id}",
                 )
             return {"t2_blueprint_type_id": type_id, "t1_blueprint_type_id": t1_bp_id}
+
+        @get("/blueprint-for-product/{product_type_id:int}")
+        async def get_blueprint_for_product(self, product_type_id: int) -> dict:
+            """Get the blueprint that manufactures a given product, with materials."""
+            if not sde.is_loaded:
+                raise HTTPException(status_code=503, detail="SDE data not loaded")
+
+            bp_type_id = sde.get_blueprint_by_product(product_type_id)
+            if bp_type_id is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No blueprint produces type {product_type_id}",
+                )
+
+            mfg = sde.get_blueprint_materials(bp_type_id)
+            if mfg is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No manufacturing data for blueprint {bp_type_id}",
+                )
+
+            rig_category = sde.get_blueprint_rig_category(bp_type_id)
+
+            return {
+                "blueprint_type_id": bp_type_id,
+                "product_type_id": product_type_id,
+                "product_name": sde.get_type_name(product_type_id),
+                "activity_type": mfg["activity_type"],
+                "time": mfg["time"],
+                "materials": mfg["materials"],
+                "products": mfg["products"],
+                "rig_category": rig_category,
+            }
 
         @get("/system-security/{system_name:str}")
         async def get_system_security(self, system_name: str) -> dict:
@@ -617,6 +702,7 @@ def create_esi_routes(
         ESICharacterController,
         ESIDataController,
         FacilityController,
+        ChainController,
         SDEController,
         MarketController,
         SettingsController,
